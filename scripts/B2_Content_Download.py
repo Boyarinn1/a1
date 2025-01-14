@@ -17,7 +17,7 @@ FOLDERS = ["444/", "555/", "666/"]
 
 # Логирование
 def log_message(message):
-    
+
     # Создаём директорию для логов, если её нет
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
@@ -71,6 +71,9 @@ def download_files(s3_client, group_name):
 
 # Обновление конфигурационного файла
 def update_config(folder):
+    # Создаём директорию для конфигурации, если её нет
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    # Записываем конфигурацию
     config = {"publish": folder, "empty": []}
     with open(CONFIG_FILE, "w") as config_file:
         json.dump(config, config_file, indent=4)
