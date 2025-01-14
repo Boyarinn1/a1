@@ -20,61 +20,53 @@ jobs:
 
       # Установка зависимостей
       - name: Install dependencies
-        run: pip install requests
+        run: pip install boto3
 
       # Запуск тестового скрипта
       - name: Run B2 access test
         env:
-          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}  # Секреты для безопасного хранения
-          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}  # Секреты для безопасного хранения
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_KEY_ID: ${{ secrets.S3_KEY_ID }}
+          S3_APPLICATION_KEY: ${{ secrets.S3_APPLICATION_KEY }}
         run: |
           python <<EOF
-          import requests
-          import base64
+          import boto3
+          from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
-          key_id = "${{ secrets.B2_KEY_ID }}"
-          application_key = "${{ secrets.B2_APPLICATION_KEY }}"
-          bucket_name = "boyarinnbotbucket"
+          # Конфигурация
+          ENDPOINT = "${{ secrets.S3_ENDPOINT }}"
+          BUCKET_NAME = "${{ secrets.S3_BUCKET_NAME }}"
+          KEY_ID = "${{ secrets.S3_KEY_ID }}"
+          APPLICATION_KEY = "${{ secrets.S3_APPLICATION_KEY }}"
 
-          # Авторизация
-          auth_url = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
-          credentials = f"{key_id}:{application_key}"
-          headers = {
-              "Authorization": "Basic " + base64.b64encode(credentials.encode()).decode()
-          }
-          response = requests.get(auth_url, headers=headers)
-          response.raise_for_status()
-          auth_data = response.json()
-          auth_token = auth_data["authorizationToken"]
-          api_url = auth_data["apiUrl"]
+          def test_b2_connection():
+              try:
+                  # Создание клиента S3 с параметрами Backblaze B2
+                  s3_client = boto3.client(
+                      's3',
+                      endpoint_url=ENDPOINT,
+                      aws_access_key_id=KEY_ID,
+                      aws_secret_access_key=APPLICATION_KEY
+                  )
 
-          # Получение bucketId
-          list_buckets_url = f"{api_url}/b2api/v2/b2_list_buckets"
-          headers = {"Authorization": auth_token}
-          response = requests.post(list_buckets_url, headers=headers)
-          response.raise_for_status()
-          buckets = response.json()["buckets"]
-          bucket_id = None
-          for bucket in buckets:
-              if bucket["bucketName"] == bucket_name:
-                  bucket_id = bucket["bucketId"]
-                  break
+                  # Список объектов в бакете
+                  response = s3_client.list_objects_v2(Bucket=BUCKET_NAME)
 
-          if not bucket_id:
-              raise ValueError(f"Bucket {bucket_name} not found.")
+                  if 'Contents' in response:
+                      print("Объекты в бакете:")
+                      for obj in response['Contents']:
+                          print(f" - {obj['Key']}")
+                  else:
+                      print("Бакет пуст или отсутствуют права на доступ.")
 
-          print(f"Bucket ID: {bucket_id}")
+              except NoCredentialsError:
+                  print("Ошибка: неверные или отсутствующие учетные данные.")
+              except PartialCredentialsError:
+                  print("Ошибка: указаны не все учетные данные.")
+              except Exception as e:
+                  print(f"Произошла ошибка: {e}")
 
-          # Получение списка файлов
-          list_files_url = f"{api_url}/b2api/v2/b2_list_file_names"
-          payload = {"bucketId": bucket_id}
-          response = requests.post(list_files_url, headers=headers, json=payload)
-          response.raise_for_status()
-          files = response.json()["files"]
-          if files:
-              print("Files in the bucket:")
-              for file in files:
-                  print(f"- {file['fileName']}")
-          else:
-              print("No files found in the bucket.")
+          if __name__ == "__main__":
+              test_b2_connection()
           EOF
