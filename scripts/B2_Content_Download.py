@@ -17,6 +17,11 @@ FOLDERS = ["444/", "555/", "666/"]
 
 # Логирование
 def log_message(message):
+    
+    # Создаём директорию для логов, если её нет
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+    # Пишем лог
     print(message)  # Дублируем лог в терминал
     with open(LOG_FILE, "a") as log:
         log.write(f"[{datetime.now()}] {message}\n")
