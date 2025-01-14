@@ -1,0 +1,80 @@
+name: Test B2 Access
+
+on:
+  workflow_dispatch:  # Позволяет запускать процесс вручную через интерфейс GitHub
+
+jobs:
+  test-b2-access:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Проверка кода из репозитория
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Установка Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      # Установка зависимостей
+      - name: Install dependencies
+        run: pip install requests
+
+      # Запуск тестового скрипта
+      - name: Run B2 access test
+        env:
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}  # Секреты для безопасного хранения
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+        run: |
+          python <<EOF
+          import requests
+          import base64
+
+          key_id = "${{ secrets.B2_KEY_ID }}"
+          application_key = "${{ secrets.B2_APPLICATION_KEY }}"
+          bucket_name = "boyarinnbotbucket"
+
+          # Авторизация
+          auth_url = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
+          credentials = f"{key_id}:{application_key}"
+          headers = {
+              "Authorization": "Basic " + base64.b64encode(credentials.encode()).decode()
+          }
+          response = requests.get(auth_url, headers=headers)
+          response.raise_for_status()
+          auth_data = response.json()
+          auth_token = auth_data["authorizationToken"]
+          api_url = auth_data["apiUrl"]
+
+          # Получение bucketId
+          list_buckets_url = f"{api_url}/b2api/v2/b2_list_buckets"
+          headers = {"Authorization": auth_token}
+          response = requests.post(list_buckets_url, headers=headers)
+          response.raise_for_status()
+          buckets = response.json()["buckets"]
+          bucket_id = None
+          for bucket in buckets:
+              if bucket["bucketName"] == bucket_name:
+                  bucket_id = bucket["bucketId"]
+                  break
+
+          if not bucket_id:
+              raise ValueError(f"Bucket {bucket_name} not found.")
+
+          print(f"Bucket ID: {bucket_id}")
+
+          # Получение списка файлов
+          list_files_url = f"{api_url}/b2api/v2/b2_list_file_names"
+          payload = {"bucketId": bucket_id}
+          response = requests.post(list_files_url, headers=headers, json=payload)
+          response.raise_for_status()
+          files = response.json()["files"]
+          if files:
+              print("Files in the bucket:")
+              for file in files:
+                  print(f"- {file['fileName']}")
+          else:
+              print("No files found in the bucket.")
+          EOF
