@@ -1,4 +1,3 @@
-import os
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 import json
@@ -27,6 +26,7 @@ def send_file_to_telegram(file_path):
     """
     Отправляет файл в Telegram-канал.
     """
+    log_message(f"Попытка отправки файла: {file_path}")
     try:
         with open(file_path, "rb") as file:
             response = requests.post(
@@ -34,12 +34,13 @@ def send_file_to_telegram(file_path):
                 data={"chat_id": CHAT_ID},
                 files={"document": file}
             )
+        log_message(f"Ответ Telegram API: {response.json()}")
         if response.status_code == 200:
             log_message(f"Файл {file_path} успешно отправлен в Telegram.")
         else:
             log_message(f"Ошибка при отправке файла {file_path}: {response.text}")
     except Exception as e:
-        log_message(f"Ошибка при отправке файла {file_path}: {e}")
+        log_message(f"Исключение при отправке файла {file_path}: {e}")
 
 # Функция для отправки всех файлов из директории
 def send_downloaded_files_to_telegram(directory):
