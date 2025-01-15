@@ -3,17 +3,52 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 import json
 from datetime import datetime
+import os
+import requests
+
 
 # Конфигурация через переменные окружения
 ENDPOINT = os.getenv("S3_ENDPOINT")
 BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 KEY_ID = os.getenv("S3_KEY_ID")
 APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
 
 DIRECTORY = "a1/data/downloaded"
 LOG_FILE = "a1/logs/operation_log.txt"
 CONFIG_FILE = "a1/config/config_public.json"
 FOLDERS = ["444/", "555/", "666/"]
+
+# Функция для отправки одного файла
+def send_file_to_telegram(file_path):
+    """
+    Отправляет файл в Telegram-канал.
+    """
+    try:
+        with open(file_path, "rb") as file:
+            response = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument",
+                data={"chat_id": CHAT_ID},
+                files={"document": file}
+            )
+        if response.status_code == 200:
+            log_message(f"Файл {file_path} успешно отправлен в Telegram.")
+        else:
+            log_message(f"Ошибка при отправке файла {file_path}: {response.text}")
+    except Exception as e:
+        log_message(f"Ошибка при отправке файла {file_path}: {e}")
+
+# Функция для отправки всех файлов из директории
+def send_downloaded_files_to_telegram(directory):
+    """
+    Отправляет все файлы из указанной директории в Telegram.
+    """
+    for file_name in os.listdir(directory):
+        file_path = os.path.join(directory, file_name)
+        send_file_to_telegram(file_path)
 
 # Логирование
 def log_message(message):
