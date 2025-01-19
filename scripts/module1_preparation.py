@@ -199,6 +199,8 @@ def update_config_in_b2(client, folder):
     # Скачиваем текущий конфиг
     try:
         log_message(f"📂 Проверяем путь к файлу в B2: {BUCKET_NAME}/{config_key}")
+        local_path = os.path.join(BASE_DIR, "config", "config_public.json")
+        log_message(f"📥 Скачивание config_public.json в {local_path}")
         client.download_file(BUCKET_NAME, config_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
         with open(local_config_path, "r", encoding="utf-8") as config_file:
             config = json.load(config_file)
