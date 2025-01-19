@@ -1,45 +1,35 @@
-import os
-import json
-import logging
-from botocore.exceptions import ClientError
 import boto3
+import os
+
+# Получение переменных окружения
+S3_KEY_ID = os.getenv("S3_KEY_ID")
+S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+
+# Подключение к B2
+client = boto3.client(
+    "s3",
+    aws_access_key_id=S3_KEY_ID,
+    aws_secret_access_key=S3_APPLICATION_KEY,
+    endpoint_url=S3_ENDPOINT,
+)
 
 
-def get_b2_client():
-    session = boto3.session.Session()
-    return session.client(
-        's3',
-        endpoint_url=os.getenv('S3_ENDPOINT'),
-        aws_access_key_id=os.getenv('S3_KEY_ID'),
-        aws_secret_access_key=os.getenv('S3_APPLICATION_KEY'),
-        config=boto3.session.Config(signature_version='s3')
-    )
+# Функция для листинга файлов в папках
+def list_files_in_folder(folder):
+    response = client.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=folder)
+    files = response.get("Contents", [])
+
+    print(f"📂 Папка: {folder}")
+    if not files:
+        print("❌ Файлы не найдены")
+    else:
+        for file in files:
+            print(f"📄 {file['Key']} ({file['Size']} bytes)")
+    print("-" * 40)
 
 
-def download_file(client, bucket_name, file_key, local_path):
-    try:
-        with open(local_path, 'wb') as f:
-            client.download_fileobj(bucket_name, file_key, f)
-        print(f"✅ Файл {file_key} успешно загружен в {local_path}")
-    except ClientError as e:
-        print(f"❌ Ошибка скачивания {file_key}: {e.response['Error']['Message']}")
-
-
-def main():
-    client = get_b2_client()
-    bucket_name = os.getenv('S3_BUCKET_NAME')
-    download_dir = "data/downloaded"
-    os.makedirs(download_dir, exist_ok=True)
-
-    files_to_download = [
-        "444/20250116-1932.json",
-        "444/20250116-1932.mp4"
-    ]
-
-    for file_key in files_to_download:
-        local_path = os.path.join(download_dir, os.path.basename(file_key))
-        download_file(client, bucket_name, file_key, local_path)
-
-
-if __name__ == "__main__":
-    main()
+# Листинг файлов в трех папках
+for folder in ["444/", "555/", "666/"]:
+    list_files_in_folder(folder)
