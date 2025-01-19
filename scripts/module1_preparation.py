@@ -4,6 +4,8 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from datetime import datetime
 from dotenv import load_dotenv
+from botocore.config import Config
+
 
 # Загрузка переменных окружения
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -25,10 +27,11 @@ APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 # Подключение к B2
 def create_b2_client():
     return boto3.client(
-        's3',
-        endpoint_url=ENDPOINT,
-        aws_access_key_id=KEY_ID,
-        aws_secret_access_key=APPLICATION_KEY
+        "s3",
+        endpoint_url=os.getenv("S3_ENDPOINT"),
+        aws_access_key_id=os.getenv("S3_KEY_ID"),
+        aws_secret_access_key=os.getenv("S3_APPLICATION_KEY"),
+        config=Config(signature_version="s3")  # Отключаем неподдерживаемые заголовки
     )
 
 # Поиск готовой группы файлов
@@ -50,21 +53,22 @@ def find_ready_group(client):
                 return folder, name
     return None, None
 
-# Скачивание группы файлов
+# Скачивание файлов
 def download_group(client, folder, group_name):
-    """Скачивает файлы .json и .mp4 из указанной папки"""
     group_files = [f"{folder}{group_name}.json", f"{folder}{group_name}.mp4"]
+    os.makedirs("data/downloaded/", exist_ok=True)
 
     for file_key in group_files:
-        local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_key))
+        local_path = os.path.join("data/downloaded/", os.path.basename(file_key))
         print(f"📥 Скачивание {file_key} в {local_path}")
 
         try:
-            with open(local_path, 'wb') as f:
-                client.download_fileobj(Bucket=BUCKET_NAME, Key=file_key, Fileobj=f)
+            # Используем download_fileobj(), чтобы обойти `x-amz-checksum-mode`
+            with open(local_path, "wb") as f:
+                client.download_fileobj(os.getenv("S3_BUCKET_NAME"), file_key, f)
             print(f"✅ Файл скачан: {file_key}")
-        except Exception as e:
-            print(f"❌ Ошибка скачивания {file_key}: {e}")
+        except ClientError as e:
+            print(f"❌ Ошибка скачивания {file_key}: {e.response['Error']['Message']}")
 
 
 # Основная логика
