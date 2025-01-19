@@ -5,7 +5,12 @@ import requests
 # Определяем пути
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # scripts/
 BASE_DIR = os.path.dirname(BASE_DIR)  # a1/
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
+DOWNLOAD_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "data", "downloaded"))
+
+print(f"📂 DOWNLOAD_DIR: {DOWNLOAD_DIR}")
+print(f"📂 Содержимое папки: {os.listdir(DOWNLOAD_DIR) if os.path.exists(DOWNLOAD_DIR) else 'Папка не найдена'}")
+print(f"📍 Текущая директория: {os.getcwd()}")
+
 
 # Получаем токен и ID чата
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
