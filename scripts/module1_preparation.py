@@ -52,20 +52,16 @@ def find_ready_group(client):
 
 # Скачивание группы файлов
 def download_group(client, folder, group_name):
-    """
-    Скачивает группу файлов (.json и .mp4) из указанной папки.
-    """
+    """Скачивает файлы .json и .mp4 из указанной папки"""
     group_files = [f"{folder}{group_name}.json", f"{folder}{group_name}.mp4"]
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
     for file_key in group_files:
+        local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_key))
+        print(f"📥 Скачивание {file_key} в {local_path}")
+
         try:
-            local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_key))
-            print(f"📥 Скачивание {file_key} в {local_path}")
-
-            # Используем рабочий метод из `111.py`
-            client.download_file(Bucket=BUCKET_NAME, Key=file_key, Filename=local_path)
-
+            with open(local_path, 'wb') as f:
+                client.download_fileobj(Bucket=BUCKET_NAME, Key=file_key, Fileobj=f)
             print(f"✅ Файл скачан: {file_key}")
         except Exception as e:
             print(f"❌ Ошибка скачивания {file_key}: {e}")
