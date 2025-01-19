@@ -3,8 +3,8 @@ import json
 import requests
 
 # Определяем пути
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # scripts/
-BASE_DIR = os.path.dirname(BASE_DIR)  # a1/
+BASE_DIR = os.getenv("GITHUB_WORKSPACE", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 DOWNLOAD_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "data", "downloaded"))
 
 print(f"📂 DOWNLOAD_DIR: {DOWNLOAD_DIR}")
