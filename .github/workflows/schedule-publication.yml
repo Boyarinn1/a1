@@ -30,6 +30,9 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/data/downloaded
           mkdir -p $GITHUB_WORKSPACE/data/processed
 
+      - name: List files in downloaded folder (debugging)
+        run: ls -lah $GITHUB_WORKSPACE/data/downloaded
+
       - name: Run module2_publication.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
