@@ -25,6 +25,13 @@ jobs:
           pip install requests boto3 python-dotenv  # Устанавливаем dotenv
           pip list  # Вывести список установленных пакетов для отладки
 
+      - name: Debug environment variables
+        run: |
+          echo "S3_KEY_ID=$S3_KEY_ID"
+          echo "S3_APPLICATION_KEY=$S3_APPLICATION_KEY"
+          echo "S3_ENDPOINT=$S3_ENDPOINT"
+          echo "S3_BUCKET_NAME=$S3_BUCKET_NAME"
+
       - name: Debug directory structure
         run: |
           echo "Checking existing directories..."
@@ -34,4 +41,17 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scripts/module2_publication.py
+          S3_KEY_ID: ${{ secrets.S3_KEY_ID }}
+          S3_APPLICATION_KEY: ${{ secrets.S3_APPLICATION_KEY }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+        run: |
+          export S3_KEY_ID=${{ secrets.S3_KEY_ID }}
+          export S3_APPLICATION_KEY=${{ secrets.S3_APPLICATION_KEY }}
+          export S3_ENDPOINT=${{ secrets.S3_ENDPOINT }}
+          export S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
+          echo "S3_KEY_ID = $S3_KEY_ID"
+          echo "S3_APPLICATION_KEY = $S3_APPLICATION_KEY"
+          echo "S3_ENDPOINT = $S3_ENDPOINT"
+          echo "S3_BUCKET_NAME = $S3_BUCKET_NAME"
+          python scripts/module2_publication.py
