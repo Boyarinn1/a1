@@ -6,7 +6,8 @@ import requests
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # Делаем так же, как в module1_preparation.py
 
 
-DOWNLOAD_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "data", "downloaded"))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")  # Прямой путь без лишнего перехода вверх
+
 
 print(f"📂 DOWNLOAD_DIR: {DOWNLOAD_DIR}")
 print(f"📂 Содержимое папки: {os.listdir(DOWNLOAD_DIR) if os.path.exists(DOWNLOAD_DIR) else 'Папка не найдена'}")
