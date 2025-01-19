@@ -63,12 +63,13 @@ def download_group(client, folder, group_name):
             local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_key))
             print(f"📥 Скачивание {file_key} в {local_path}")
 
-            # Загрузка файла без `x-amz-checksum-mode`
-            client.download_file(Bucket=BUCKET_NAME, Key=file_key, Filename=local_path, ExtraArgs={"RequestPayer": "requester"})
+            # Используем рабочий метод из `111.py`
+            client.download_file(Bucket=BUCKET_NAME, Key=file_key, Filename=local_path)
 
             print(f"✅ Файл скачан: {file_key}")
         except Exception as e:
             print(f"❌ Ошибка скачивания {file_key}: {e}")
+
 
 # Основная логика
 def main():
