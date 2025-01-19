@@ -12,13 +12,14 @@ def get_b2_client():
         endpoint_url=os.getenv('S3_ENDPOINT'),
         aws_access_key_id=os.getenv('S3_KEY_ID'),
         aws_secret_access_key=os.getenv('S3_APPLICATION_KEY'),
-        config=boto3.session.Config(signature_version='s3v4')
+        config=boto3.session.Config(signature_version='s3')
     )
 
 
 def download_file(client, bucket_name, file_key, local_path):
     try:
-        client.download_file(bucket_name, file_key, local_path)
+        with open(local_path, 'wb') as f:
+            client.download_fileobj(bucket_name, file_key, f)
         print(f"✅ Файл {file_key} успешно загружен в {local_path}")
     except ClientError as e:
         print(f"❌ Ошибка скачивания {file_key}: {e.response['Error']['Message']}")
