@@ -24,14 +24,14 @@ BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 KEY_ID = os.getenv("S3_KEY_ID")
 APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 
-# Подключение к B2
+# Подключение к B2 с явной настройкой подписи
 def create_b2_client():
     return boto3.client(
         "s3",
         endpoint_url=os.getenv("S3_ENDPOINT"),
         aws_access_key_id=os.getenv("S3_KEY_ID"),
         aws_secret_access_key=os.getenv("S3_APPLICATION_KEY"),
-        config=Config(signature_version="s3")  # Отключаем неподдерживаемые заголовки
+        config=Config(signature_version="s3v4")  # Фиксируем использование 's3v4'
     )
 
 # Поиск готовой группы файлов
