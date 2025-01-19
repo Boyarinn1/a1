@@ -25,6 +25,11 @@ jobs:
           pip install requests  # Установка requests вручную на случай отсутствия
           pip list  # Вывести список установленных пакетов для отладки
 
+      - name: Create necessary directories
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/data/downloaded
+          mkdir -p $GITHUB_WORKSPACE/data/processed
+
       - name: Run module2_publication.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
