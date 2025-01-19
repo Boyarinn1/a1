@@ -1,6 +1,9 @@
 import os
-from botocore.exceptions import ClientError
-from modules.api_clients import get_b2_client  # Используем правильный клиент
+import boto3
+
+from botocore.config import Config
+from dotenv import load_dotenv
+
 
 # Константы
 BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
@@ -25,7 +28,15 @@ BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 KEY_ID = os.getenv("S3_KEY_ID")
 APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 
-
+def get_b2_client():
+    """Создает клиент для работы с Backblaze B2."""
+    return boto3.client(
+        "s3",
+        endpoint_url=os.getenv("S3_ENDPOINT"),
+        aws_access_key_id=os.getenv("S3_KEY_ID"),
+        aws_secret_access_key=os.getenv("S3_APPLICATION_KEY"),
+        config=Config(signature_version="s3v4")
+    )
 
 # Подключение к B2
 def create_b2_client():
