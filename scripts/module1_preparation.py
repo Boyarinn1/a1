@@ -19,8 +19,8 @@ bucket = b2_api.get_bucket_by_name(B2_BUCKET_NAME)
 folders = ["444/", "555/", "666/"]
 for folder in folders:
     print(f"\n📂 Папка: {folder}")
-    for file in bucket.ls(folder, recursive=True):
-        print(f"📄 {file.file_name} ({file.size} bytes)")
+    for file_info, _ in bucket.ls(folder, recursive=True):
+        print(f"📄 {file_info.file_name} ({file_info.size} bytes)")
     print("-" * 40)
 
 # Скачивание конкретного файла
