@@ -78,7 +78,8 @@ def download_files(client, prefix=""):
             if key.endswith((".json", ".mp4", ".png")):
                 local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(key))
                 log_message(f"Сохранение файла в: {local_path}")
-                client.download_file(BUCKET_NAME, file_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+                client.download_file(BUCKET_NAME, config_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+
                 log_message(f"Скачан файл: {key}")
             else:
                 log_message(f"Пропущен файл: {key}")
@@ -122,7 +123,7 @@ def fetch_config_from_b2(client):
     local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
 
     try:
-        client.download_file(BUCKET_NAME, file_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+        client.download_file(BUCKET_NAME, config_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
         with open(local_config_path, "r", encoding="utf-8") as config_file:
             config = json.load(config_file)
         log_message("Файл config_public.json успешно скачан и прочитан.")
@@ -140,7 +141,7 @@ def update_config_in_b2(client, folder):
 
     # Скачиваем текущий конфиг
     try:
-        client.download_file(BUCKET_NAME, file_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+        client.download_file(BUCKET_NAME, config_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
         with open(local_config_path, "r", encoding="utf-8") as config_file:
             config = json.load(config_file)
         log_message(f"Текущее содержимое config_public.json: {config}")
@@ -156,7 +157,7 @@ def update_config_in_b2(client, folder):
 
     # Загрузка файла обратно в B2
     try:
-        client.download_file(BUCKET_NAME, file_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+        client.download_file(BUCKET_NAME, config_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
         log_message(f"Файл {config_key} успешно загружен в B2.")
         log_message(f"Проверка содержимого config_public.json: {config}")
     except (BotoCoreError, ClientError) as e:
@@ -197,7 +198,8 @@ def update_config_in_b2(client, folder):
 
     # Скачиваем текущий конфиг
     try:
-        client.download_file(BUCKET_NAME, file_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+        log_message(f"📂 Проверяем путь к файлу в B2: {BUCKET_NAME}/{config_key}")
+        client.download_file(BUCKET_NAME, config_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
         with open(local_config_path, "r", encoding="utf-8") as config_file:
             config = json.load(config_file)
     except (BotoCoreError, ClientError, json.JSONDecodeError) as e:
@@ -212,7 +214,8 @@ def update_config_in_b2(client, folder):
 
     # Загрузка файла обратно в B2
     try:
-        client.download_file(BUCKET_NAME, file_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+        client.download_file(BUCKET_NAME, config_key, local_path, ExtraArgs={"ChecksumMode": "NONE"})
+
         log_message("Файл config_public.json успешно загружен в B2.")
     except (BotoCoreError, ClientError) as e:
         log_message(f"Ошибка при загрузке config_public.json в B2: {e}")
