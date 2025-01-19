@@ -95,6 +95,11 @@ def send_poll(bot_token, chat_id, poll_question, poll_options):
 
 
 def main():
+    # 🔍 Отладочный вывод путей
+    print(f"📂 DOWNLOAD_DIR: {DOWNLOAD_DIR}")
+    print(f"📂 Содержимое папки: {os.listdir(DOWNLOAD_DIR) if os.path.exists(DOWNLOAD_DIR) else '❌ Папки нет'}")
+    print(f"📍 Текущая директория: {os.getcwd()}")  # Проверка, откуда запущен скрипт
+
     """Основная функция обработки и отправки сообщений."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Ошибка: переменные окружения TELEGRAM_TOKEN или TELEGRAM_CHAT_ID не установлены!")
