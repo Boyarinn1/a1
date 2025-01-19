@@ -1,10 +1,11 @@
 import os
-import json
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
-from datetime import datetime
-from dotenv import load_dotenv
-from botocore.config import Config
+from botocore.exceptions import ClientError
+from modules.api_clients import get_b2_client  # Используем правильный клиент
+
+# Константы
+BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+DOWNLOAD_DIR = "data/downloaded/"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
 # Загрузка переменных окружения
@@ -24,15 +25,13 @@ BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 KEY_ID = os.getenv("S3_KEY_ID")
 APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 
-# Подключение к B2 с явной настройкой подписи
+
+
+# Подключение к B2
 def create_b2_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=os.getenv("S3_ENDPOINT"),
-        aws_access_key_id=os.getenv("S3_KEY_ID"),
-        aws_secret_access_key=os.getenv("S3_APPLICATION_KEY"),
-        config=Config(signature_version="s3v4")  # Фиксируем использование 's3v4'
-    )
+    return get_b2_client()  # Используем рабочий метод из `b2_storage_manager.py`
+
+
 
 # Поиск готовой группы файлов
 def find_ready_group(client):
@@ -56,20 +55,16 @@ def find_ready_group(client):
 # Скачивание файлов
 def download_group(client, folder, group_name):
     group_files = [f"{folder}{group_name}.json", f"{folder}{group_name}.mp4"]
-    os.makedirs("data/downloaded/", exist_ok=True)
 
     for file_key in group_files:
-        local_path = os.path.join("data/downloaded/", os.path.basename(file_key))
+        local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_key))
         print(f"📥 Скачивание {file_key} в {local_path}")
 
         try:
-            # Используем download_fileobj(), чтобы обойти `x-amz-checksum-mode`
-            with open(local_path, "wb") as f:
-                client.download_fileobj(os.getenv("S3_BUCKET_NAME"), file_key, f)
+            client.download_file(BUCKET_NAME, file_key, local_path)  # Используем проверенный метод
             print(f"✅ Файл скачан: {file_key}")
         except ClientError as e:
             print(f"❌ Ошибка скачивания {file_key}: {e.response['Error']['Message']}")
-
 
 # Основная логика
 def main():
