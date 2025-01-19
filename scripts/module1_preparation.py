@@ -1,12 +1,14 @@
 import os
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError  # Импортируем ClientError
+from botocore.exceptions import ClientError
 
+# === Параметры B2 ===
 BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 DOWNLOAD_DIR = "data/downloaded/"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# === Создаем клиента B2 ===
 def get_b2_client():
     """Создает клиент для работы с Backblaze B2."""
     return boto3.client(
@@ -17,8 +19,19 @@ def get_b2_client():
         config=Config(signature_version="s3v4")
     )
 
+# === Функция получения списка файлов в B2 ===
+def list_files_in_folder(s3, folder_prefix):
+    """Список файлов в папке на B2."""
+    try:
+        response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=folder_prefix)
+        return [obj['Key'] for obj in response.get('Contents', [])]
+    except ClientError as e:
+        print(f"❌ Ошибка списка файлов: {e.response['Error']['Message']}")
+        return []
+
+# === Функция скачивания файлов ===
 def download_group(client, folder, group_name):
-    """Скачивает файлы JSON и MP4 из B2 в локальную папку."""
+    """Скачивает файлы .json и .mp4 из B2 в локальную папку."""
     group_files = [f"{folder}{group_name}.json", f"{folder}{group_name}.mp4"]
 
     for file_key in group_files:
@@ -27,16 +40,17 @@ def download_group(client, folder, group_name):
 
         try:
             with open(local_path, "wb") as f:
-                client.download_fileobj(Bucket=BUCKET_NAME, Key=file_key, Fileobj=f)  # Фикс ошибки
+                client.download_fileobj(Bucket=BUCKET_NAME, Key=file_key, Fileobj=f)
             print(f"✅ Файл скачан: {file_key}")
         except ClientError as e:
             print(f"❌ Ошибка скачивания {file_key}: {e.response['Error']['Message']}")
         except Exception as e:
-            print(f"❌ Непредвиденная ошибка: {e}")
+            print(f"❌ Ошибка: {e}")
 
+# === Основная логика ===
 def main():
     client = get_b2_client()
-    folder = "444/"  # Или другую папку
+    folder = "444/"
     group_name = "20250116-1932"
     download_group(client, folder, group_name)
 
