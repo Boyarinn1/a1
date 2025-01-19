@@ -1,46 +1,32 @@
+from b2sdk.v2 import B2Api, InMemoryAccountInfo
 import os
-import boto3
-from botocore.exceptions import ClientError
 
+# Константы для работы с B2
+B2_KEY_ID = os.getenv("S3_KEY_ID")
+B2_APP_KEY = os.getenv("S3_APPLICATION_KEY")
+B2_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+DOWNLOAD_DIR = "data/downloaded"
 
-def get_b2_client():
-    return boto3.client(
-        's3',
-        endpoint_url=os.getenv('S3_ENDPOINT'),
-        aws_access_key_id=os.getenv('S3_KEY_ID'),
-        aws_secret_access_key=os.getenv('S3_APPLICATION_KEY')
-    )
+# Инициализация B2 API
+info = InMemoryAccountInfo()
+b2_api = B2Api(info)
+b2_api.authorize_account("production", B2_KEY_ID, B2_APP_KEY)
 
+# Получаем ссылку на бакет
+bucket = b2_api.get_bucket_by_name(B2_BUCKET_NAME)
 
-def list_b2_files(s3, bucket_name):
-    response = s3.list_objects_v2(Bucket=bucket_name)
-    if 'Contents' in response:
-        for obj in response['Contents']:
-            print(f"📄 {obj['Key']} ({obj['Size']} bytes)")
-    else:
-        print("❌ Нет файлов в хранилище B2")
+# Листинг файлов в папках 444/, 555/, 666/
+folders = ["444/", "555/", "666/"]
+for folder in folders:
+    print(f"\n📂 Папка: {folder}")
+    for file in bucket.ls(folder, recursive=True):
+        print(f"📄 {file.file_name} ({file.size} bytes)")
+    print("-" * 40)
 
+# Скачивание конкретного файла
+file_name = "444/20250116-1932.json"
+local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
 
-def download_file(s3, bucket_name, file_key, local_path):
-    try:
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        s3.download_file(bucket_name, file_key, local_path)
-        print(f"✅ Файл {file_key} успешно скачан в {local_path}")
-    except ClientError as e:
-        print(f"❌ Ошибка скачивания {file_key}: {e.response['Error']['Message']}")
-
-
-def main():
-    bucket_name = os.getenv('S3_BUCKET_NAME')
-    s3 = get_b2_client()
-
-    print("\n📂 Листинг файлов в B2:")
-    list_b2_files(s3, bucket_name)
-
-    file_key = "444/20250116-1932.json"
-    local_path = "a1/data/downloaded/20250116-1932.json"
-    download_file(s3, bucket_name, file_key, local_path)
-
-
-if __name__ == "__main__":
-    main()
+print(f"\n📥 Скачивание {file_name} в {local_path}")
+downloaded_file = bucket.download_file_by_name(file_name, local_path)
+print("✅ Файл успешно скачан!")
