@@ -25,13 +25,10 @@ jobs:
           pip install requests  # Установка requests вручную на случай отсутствия
           pip list  # Вывести список установленных пакетов для отладки
 
-      - name: Create necessary directories
+      - name: Debug directory structure
         run: |
-          mkdir -p $GITHUB_WORKSPACE/data/downloaded
-          mkdir -p $GITHUB_WORKSPACE/data/processed
-
-      - name: List files in downloaded folder (debugging)
-        run: ls -lah $GITHUB_WORKSPACE/data/downloaded
+          echo "Checking existing directories..."
+          find . -type d | sort
 
       - name: Run module2_publication.py
         env:
