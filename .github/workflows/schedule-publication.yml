@@ -55,3 +55,7 @@ jobs:
           echo "S3_ENDPOINT = $S3_ENDPOINT"
           echo "S3_BUCKET_NAME = $S3_BUCKET_NAME"
           python scripts/module2_publication.py
+
+     - name: Загружаем файл на локальный ПК
+       run: cp /home/runner/work/a1/a1/data/downloaded/20250116-1932.json C:/Users/boyar/a1/data/downloaded/
+

@@ -1,32 +1,55 @@
-from b2sdk.v2 import B2Api, InMemoryAccountInfo
 import os
+from b2sdk.v2 import B2Api, InMemoryAccountInfo
 
-# Константы для работы с B2
-B2_KEY_ID = os.getenv("S3_KEY_ID")
-B2_APP_KEY = os.getenv("S3_APPLICATION_KEY")
-B2_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-DOWNLOAD_DIR = "data/downloaded"
-
-# Инициализация B2 API
+# Подключение к B2
 info = InMemoryAccountInfo()
 b2_api = B2Api(info)
-b2_api.authorize_account("production", B2_KEY_ID, B2_APP_KEY)
+b2_api.authorize_account("production", os.getenv("S3_KEY_ID"), os.getenv("S3_APPLICATION_KEY"))
 
-# Получаем ссылку на бакет
-bucket = b2_api.get_bucket_by_name(B2_BUCKET_NAME)
+BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+bucket = b2_api.get_bucket_by_name(BUCKET_NAME)
 
-# Листинг файлов в папках 444/, 555/, 666/
-folders = ["444/", "555/", "666/"]
-for folder in folders:
-    print(f"\n📂 Папка: {folder}")
-    for file_info, _ in bucket.ls(folder, recursive=True):
-        print(f"📄 {file_info.file_name} ({file_info.size} bytes)")
-    print("-" * 40)
+DOWNLOAD_DIR = "/home/runner/work/a1/a1/data/downloaded"
+LOCAL_DOWNLOAD_DIR = "C:/Users/boyar/a1/data/downloaded"  # Локальная папка Windows
 
-# Скачивание конкретного файла
-file_name = "444/20250116-1932.json"
-local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
 
-print(f"\n📥 Скачивание {file_name} в {local_path}")
-downloaded_file = bucket.download_file_by_name(file_name, local_path)
-print("✅ Файл успешно скачан!")
+def list_files():
+    """
+    Выводит список файлов в B2.
+    """
+    for folder in ["444/", "555/", "666/"]:
+        print(f"\n📂 Папка: {folder}")
+        for file_info in bucket.ls(folder, recursive=True):
+            print(f"📄 {file_info[0]} ({file_info[1]} bytes)")
+        print("-" * 40)
+
+
+def download_file(file_name, local_folder):
+    """
+    Скачивает файл из B2 и сохраняет локально.
+    """
+    print(f"📥 Скачивание {file_name} в {local_folder}/{file_name.split('/')[-1]}")
+
+    local_path = os.path.join(local_folder, file_name.split("/")[-1])
+    print(f"Файл сохраняется в: {local_path}")  # Отладочный вывод пути
+
+    downloaded_file = bucket.download_file_by_name(file_name, local_path)
+
+    if os.path.exists(local_path):
+        print("✅ Файл успешно скачан!")
+    else:
+        print("❌ Ошибка скачивания!")
+
+
+def check_downloaded_files():
+    """
+    Проверяет, какие файлы уже скачаны.
+    """
+    print(f"\n📂 DOWNLOAD_DIR: {DOWNLOAD_DIR}")
+    print(f"📂 Содержимое папки: {os.listdir(DOWNLOAD_DIR)}")
+
+
+if __name__ == "__main__":
+    list_files()  # Листинг файлов в B2
+    download_file("444/20250116-1932.json", DOWNLOAD_DIR)  # Скачивание файла
+    check_downloaded_files()  # Проверка скачанных файлов
