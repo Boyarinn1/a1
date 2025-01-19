@@ -1,6 +1,8 @@
 import os
 import json
 import boto3
+print(f"🛠 Версия boto3: {boto3.__version__}")
+
 
 from botocore.exceptions import BotoCoreError, ClientError
 from datetime import datetime
