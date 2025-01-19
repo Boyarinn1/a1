@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import subprocess
 
 # Определяем пути
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # Делаем так же, как в module1_preparation.py
@@ -129,6 +130,9 @@ def main():
         poll_data = extract_poll(post_data)
         if poll_data:
             send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
+
+    print("🚀 Публикация завершена. Запускаем module1_preparation.py...")
+    subprocess.run(["python", "scripts/module1_preparation.py"], check=True)
 
 
 if __name__ == "__main__":
