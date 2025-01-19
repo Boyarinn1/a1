@@ -3,7 +3,8 @@ import json
 import requests
 
 # Определяем пути
-BASE_DIR = os.getenv("GITHUB_WORKSPACE", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # Делаем так же, как в module1_preparation.py
+
 
 DOWNLOAD_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "data", "downloaded"))
 
@@ -100,7 +101,7 @@ def send_poll(bot_token, chat_id, poll_question, poll_options):
 
 
 def main():
-    
+
     # 🔍 Отладочный вывод путей
     print(f"📂 BASE_DIR в module2: {BASE_DIR}")
     print(f"📂 DOWNLOAD_DIR в module2: {DOWNLOAD_DIR}")
