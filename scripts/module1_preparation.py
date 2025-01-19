@@ -1,56 +1,35 @@
 import os
-import json
-from botocore.exceptions import ClientError
-from modules.api_clients import get_b2_client
-from modules.logger import get_logger
-from modules.config_manager import ConfigManager
-from modules.b2_storage_manager import list_files_in_folder, download_file, save_config_public, load_config_public, \
-    handle_publish, get_ready_groups
+import boto3
+from botocore.config import Config
 
-dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+def download_json_from_b2():
+    # Получаем конфигурацию из переменных окружения GitHub Secrets
+    S3_KEY_ID = os.getenv("S3_KEY_ID")
+    S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
+    S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+    S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+    FILE_NAME = "data.json"  # Имя файла в B2
+    SAVE_PATH = "a1/data/downloaded/"  # Папка для сохранения
 
-# === Инициализация логирования и конфигурации ===
-config = ConfigManager()
-logger = get_logger("module1_preparation")
+    os.makedirs(SAVE_PATH, exist_ok=True)
 
-B2_BUCKET_NAME = config.get("API_KEYS.b2.bucket_name")
-CONFIG_PUBLIC_PATH = config.get("FILE_PATHS.config_public")
+    # Подключение к B2
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=S3_KEY_ID,
+        aws_secret_access_key=S3_APPLICATION_KEY,
+        endpoint_url=S3_ENDPOINT,
+        config=Config(signature_version="s3v4")
+    )
 
-# Подключение к B2
-client = get_b2_client()
+    local_file_path = os.path.join(SAVE_PATH, FILE_NAME)
 
-
-def download_group(folder):
-    files = list_files_in_folder(client, folder)
-    ready_groups = get_ready_groups(files)
-
-    if not ready_groups:
-        logger.warning(f"⚠️ В папке {folder} нет готовых групп файлов.")
-        return
-
-    for group_id in ready_groups:
-        for ext in ['.json', '.mp4']:
-            file_key = f"{folder}{group_id}{ext}"
-            local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_key))
-            download_file(client, file_key, local_path)
-
-
-def update_config_in_b2(folder):
-    config_data = load_config_public(client)
-    config_data["publish"] = folder
-    save_config_public(client, config_data)
-
-
-def main():
-    folder = "444/"  # Пример папки
-    download_group(folder)
-    update_config_in_b2(folder)
-    handle_publish(client, load_config_public(client))
-    logger.info("✅ Скрипт завершил выполнение.")
-
+    try:
+        # Скачивание файла
+        s3.download_file(S3_BUCKET_NAME, FILE_NAME, local_file_path)
+        print(f"✅ Файл {FILE_NAME} загружен в {local_file_path}")
+    except Exception as e:
+        print(f"❌ Ошибка при загрузке файла: {e}")
 
 if __name__ == "__main__":
-    main()
+    download_json_from_b2()
