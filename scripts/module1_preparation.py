@@ -40,7 +40,7 @@ def download_group(client, folder, group_name):
 
         try:
             with open(local_path, "wb") as f:
-                client.download_fileobj(Bucket=BUCKET_NAME, Key=file_key, Fileobj=f)
+                client.get_object(Bucket=BUCKET_NAME, Key=file_key)["Body"].download_fileobj(f)
             print(f"✅ Файл скачан: {file_key}")
         except ClientError as e:
             print(f"❌ Ошибка скачивания {file_key}: {e.response['Error']['Message']}")
