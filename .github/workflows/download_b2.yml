@@ -1,0 +1,47 @@
+name: B2 Content Download
+
+on:
+  workflow_dispatch:  # Ручной запуск
+  schedule:
+    - cron: "0 * * * *"  # Запуск каждый час
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install b2sdk
+
+      - name: Debug Environment Variables
+        run: |
+          echo "S3_KEY_ID=$S3_KEY_ID"
+          echo "S3_APPLICATION_KEY=$S3_APPLICATION_KEY"
+          echo "S3_BUCKET_NAME=$S3_BUCKET_NAME"
+
+      - name: Run B2_Content_Download.py
+        env:
+          S3_KEY_ID: ${{ secrets.S3_KEY_ID }}
+          S3_APPLICATION_KEY: ${{ secrets.S3_APPLICATION_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python a1/scripts/B2_Content_Download.py
+
+      - name: Archive downloaded files
+        run: zip -r downloaded_files.zip a1/data/downloaded/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: downloaded_files
+          path: a1/data/downloaded/
