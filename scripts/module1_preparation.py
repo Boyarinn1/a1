@@ -24,8 +24,9 @@ try:
 except Exception as e:
     raise RuntimeError(f"❌ Ошибка при получении bucket'а {S3_BUCKET_NAME}: {e}")
 
-# 🔽 Пути сохранения
-DOWNLOAD_DIR = "C:/Users/boyar/a1/data/downloaded"
+# ✅ Используем тот же путь, что и в `module2_publication.py`
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
 
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
