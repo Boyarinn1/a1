@@ -1,4 +1,5 @@
 import os
+import subprocess
 from b2sdk.v2 import B2Api, InMemoryAccountInfo
 
 # 🔄 Авторизация в B2
@@ -32,23 +33,55 @@ if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-def download_file(file_name, local_folder):
-    local_path = os.path.join(local_folder, os.path.basename(file_name))
-    print(f"📥 Попытка скачать: {file_name} в {local_path}")
+def clear_old_files():
+    """Удаляет старые файлы из артефактов и рабочей папки."""
+    print(f"🗑️ Очистка {DOWNLOAD_DIR}...")
+    for file in os.listdir(DOWNLOAD_DIR):
+        file_path = os.path.join(DOWNLOAD_DIR, file)
+        os.remove(file_path)
+    print("✅ Папка очищена.")
 
-    try:
-        with open(local_path, "wb") as f:
-            bucket.download_file_by_name(file_name).save(f)
-        print(f"✅ Файл {file_name} сохранён! Проверяем наличие...")
+    # Удаляем старые артефакты из GitHub Actions
+    print("🗑️ Удаление старых артефактов из GitHub...")
+    subprocess.run(["gh", "run", "delete", "downloaded_files"], check=False)
+    print("✅ Старые артефакты удалены.")
 
-        # 🔍 Проверяем, действительно ли файл существует
-        if os.path.exists(local_path):
-            print(f"✅ Файл {file_name} присутствует в {local_folder}!")
-        else:
-            print(f"❌ Файл {file_name} НЕ существует после сохранения!")
-    except Exception as e:
-        print(f"❌ Ошибка скачивания {file_name}: {e}")
+
+def restore_files_from_artifacts():
+    """Скачивает артефакты обратно в рабочую папку."""
+    print("📥 Восстановление файлов из артефактов...")
+    subprocess.run(["gh", "run", "download", "--name", "downloaded_files", "--dir", DOWNLOAD_DIR], check=False)
+    print(f"✅ Файлы восстановлены в {DOWNLOAD_DIR}")
+
+
+def download_new_files():
+    """Загружает новую неопубликованную группу файлов из B2."""
+    print("📥 Поиск новых файлов в B2...")
+    json_file = None
+    mp4_file = None
+
+    for file_info, _ in bucket.ls("444/", recursive=True):
+        if file_info.endswith(".json"):
+            json_file = file_info
+            mp4_file = file_info.replace(".json", ".mp4")
+            break
+
+    if not json_file or not mp4_file:
+        print("⚠️ Нет новых файлов для загрузки!")
+        return
+
+    print(f"📥 Скачиваем {json_file} и {mp4_file}...")
+    for file_name in [json_file, mp4_file]:
+        local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
+        try:
+            with open(local_path, "wb") as f:
+                bucket.download_file_by_name(file_name).save(f)
+            print(f"✅ {file_name} загружен в {local_path}")
+        except Exception as e:
+            print(f"❌ Ошибка загрузки {file_name}: {e}")
 
 
 if __name__ == "__main__":
-    download_file("444/20250116-1932.json", DOWNLOAD_DIR)
+    clear_old_files()  # Удаляем старую группу
+    restore_files_from_artifacts()  # Восстанавливаем файлы из артефактов
+    download_new_files()  # Загружаем новые файлы из B2

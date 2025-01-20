@@ -1,11 +1,19 @@
 import os
 import json
 import requests
+import subprocess
 
 # Определяем пути
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # scripts/
-BASE_DIR = os.path.dirname(BASE_DIR)  # a1/
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # Делаем так же, как в module1_preparation.py
+
+
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")  # Прямой путь без лишнего перехода вверх
+
+
+print(f"📂 DOWNLOAD_DIR: {DOWNLOAD_DIR}")
+print(f"📂 Содержимое папки: {os.listdir(DOWNLOAD_DIR) if os.path.exists(DOWNLOAD_DIR) else 'Папка не найдена'}")
+print(f"📍 Текущая директория: {os.getcwd()}")
+
 
 # Получаем токен и ID чата
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -95,6 +103,12 @@ def send_poll(bot_token, chat_id, poll_question, poll_options):
 
 
 def main():
+
+    # 🔍 Отладочный вывод путей
+    print(f"📂 BASE_DIR в module2: {BASE_DIR}")
+    print(f"📂 DOWNLOAD_DIR в module2: {DOWNLOAD_DIR}")
+    print(f"📂 Содержимое папки в module2: {os.listdir(DOWNLOAD_DIR) if os.path.exists(DOWNLOAD_DIR) else '❌ Папки нет'}")
+
     """Основная функция обработки и отправки сообщений."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Ошибка: переменные окружения TELEGRAM_TOKEN или TELEGRAM_CHAT_ID не установлены!")
@@ -116,6 +130,9 @@ def main():
         poll_data = extract_poll(post_data)
         if poll_data:
             send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
+
+    print("🚀 Публикация завершена. Запускаем module1_preparation.py...")
+    subprocess.run(["python", "scripts/module1_preparation.py"], check=True)
 
 
 if __name__ == "__main__":
