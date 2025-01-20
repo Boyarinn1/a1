@@ -3,6 +3,16 @@ import json
 import requests
 import subprocess
 
+script_path = "scripts/module1_preparation.py"
+
+if os.path.exists(script_path):
+    print(f"🚀 Запускаем {script_path} ...")
+    result = subprocess.run(["python", script_path], capture_output=True, text=True)
+    print(f"📜 Лог module1_preparation.py:\n{result.stdout}")
+    print(f"⚠️ Ошибки:\n{result.stderr}")
+else:
+    print(f"❌ Ошибка: {script_path} не найден!")
+
 # Используем правильный путь
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")

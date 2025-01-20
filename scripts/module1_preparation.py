@@ -11,6 +11,8 @@ S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 GH_TOKEN = os.getenv("GH_TOKEN")
 
+print("🔄 module1_preparation.py запущен!")
+
 if not GH_TOKEN:
     print("⚠️ ВНИМАНИЕ: GH_TOKEN не установлен! Артефакты не будут загружены.")
 else:
