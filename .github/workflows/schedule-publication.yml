@@ -22,7 +22,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install requests boto3 python-dotenv b2sdk # Устанавливаем dotenv
+          pip install requests boto3 python-dotenv b2sdk
           pip list  # Вывести список установленных пакетов для отладки
 
       - name: Debug environment variables
@@ -56,6 +56,12 @@ jobs:
           echo "S3_BUCKET_NAME = $S3_BUCKET_NAME"
           python scripts/module2_publication.py
 
-     - name: Загружаем файл на локальный ПК
-       run: cp /home/runner/work/a1/a1/data/downloaded/20250116-1932.json C:/Users/boyar/a1/data/downloaded/
+      - name: Archive downloaded file
+        run: |
+          zip -r downloaded_files.zip /home/runner/work/a1/a1/data/downloaded/
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: downloaded_files
+          path: /home/runner/work/a1/a1/data/downloaded/
