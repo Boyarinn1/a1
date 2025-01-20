@@ -86,15 +86,22 @@ def main():
     if not post_data:
         return
 
+    # ✅ Декодируем JSON, если пришла строка
+    if isinstance(post_data, str):
+        try:
+            post_data = json.loads(post_data)
+        except json.JSONDecodeError:
+            print(f"❌ Ошибка: post_data содержит некорректный JSON!\n{post_data}")
+            return
+
     message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
     send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
 
-    poll_data = extract_poll(post_data)  # ✅ Теперь функция определена
+    poll_data = extract_poll(post_data)
     if poll_data:
         send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
 
     print(f"✅ Публикация {pair}.json завершена.")
-
 
 if __name__ == "__main__":
     main()

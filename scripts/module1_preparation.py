@@ -11,6 +11,13 @@ S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 GH_TOKEN = os.getenv("GH_TOKEN")
 
+GH_TOKEN = os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
+if GH_TOKEN:
+    os.environ["GH_TOKEN"] = GH_TOKEN
+    print("✅ GH_TOKEN установлен.")
+else:
+    print("⚠️ ВНИМАНИЕ: GH_TOKEN не установлен! Артефакты не будут загружены.")
+
 print("🔄 module1_preparation.py запущен!")
 
 if not GH_TOKEN:
