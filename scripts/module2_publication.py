@@ -77,6 +77,8 @@ def send_message(bot_token, chat_id, message):
     print(f"📩 Ответ Telegram API: {response.status_code} {response.json()}")
 
 
+import json
+
 def main():
     pair = find_json_mp4_pairs()
     if not pair:
@@ -86,7 +88,7 @@ def main():
     if not post_data:
         return
 
-    # ✅ Декодируем JSON, если пришла строка
+    # ✅ Проверяем, является ли `post_data` строкой, и парсим JSON
     if isinstance(post_data, str):
         try:
             post_data = json.loads(post_data)
