@@ -119,8 +119,28 @@ def download_new_files():
             print(f"❌ Ошибка загрузки {file_name}: {e}")
 
 
-import subprocess
-import os
+def check_artifacts():
+    print("📥 Проверяем доступные артефакты...")
+    result = subprocess.run(["gh", "api", "repos/${{ github.repository }}/actions/artifacts"], capture_output=True,
+                            text=True)
+
+    try:
+        artifacts = json.loads(result.stdout)
+        if not artifacts["artifacts"]:
+            print("⚠️ Нет доступных артефактов.")
+            return False
+        for artifact in artifacts["artifacts"]:
+            print(f"📂 Найден артефакт: {artifact['name']}")
+        return True
+    except json.JSONDecodeError:
+        print("❌ Ошибка: Невозможно распарсить список артефактов.")
+        return False
+
+
+if check_artifacts():
+    restore_files_from_artifacts()
+else:
+    print("⚠️ Пропускаем восстановление артефактов.")
 
 
 def restore_files_from_artifacts():

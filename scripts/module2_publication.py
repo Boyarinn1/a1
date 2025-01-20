@@ -98,7 +98,7 @@ def main():
             post_data = json.loads(post_data)
         except json.JSONDecodeError:
             print(f"❌ Ошибка: post_data содержит некорректный JSON!\n{post_data}")
-            return
+            exit(1)
 
     message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
     send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
