@@ -23,18 +23,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install b2sdk
 
-      - name: Debug Environment Variables
-        run: |
-          echo "S3_KEY_ID=$S3_KEY_ID"
-          echo "S3_APPLICATION_KEY=$S3_APPLICATION_KEY"
-          echo "S3_BUCKET_NAME=$S3_BUCKET_NAME"
-
       - name: Debug Repository Structure
-        run: Get-ChildItem -Path . -Recurse
-        shell: pwsh
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -R
+        shell: bash
 
       - name: Ensure downloaded directory exists
-        run: mkdir -p a1/data/downloaded
+        run: mkdir -p data/downloaded
         shell: bash
 
       - name: Run B2_Content_Download.py
@@ -43,13 +39,13 @@ jobs:
           S3_APPLICATION_KEY: ${{ secrets.S3_APPLICATION_KEY }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: python a1/scripts/B2_Content_Download.py
+        run: python scripts/B2_Content_Download.py
 
       - name: Archive downloaded files
-        run: zip -r downloaded_files.zip a1/data/downloaded/
+        run: zip -r downloaded_files.zip data/downloaded/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
           name: downloaded_files
-          path: a1/data/downloaded/
+          path: data/downloaded/
