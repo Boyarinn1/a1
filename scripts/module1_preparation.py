@@ -36,17 +36,17 @@ def download_file(file_name, local_folder):
     Скачивает файл из B2 и сохраняет локально.
     """
     local_path = os.path.join(local_folder, os.path.basename(file_name))
-    print(f"📥 Попытка скачать: {file_name}")
+    print(f"📥 Попытка скачать: {file_name} в {local_path}")
 
     try:
         with open(local_path, "wb") as f:
             bucket.download_file_by_name(file_name).save(f)
-        print(f"✅ Файл {file_name} успешно скачан и сохранён в {local_path}")
+        print(f"✅ Файл {file_name} успешно сохранён в {local_path}")
     except Exception as e:
         print(f"❌ Ошибка скачивания {file_name}: {e}")
 
     if os.path.exists(local_path):
-        print(f"✅ Файл {file_name} присутствует в папке {local_folder}!")
+        print(f"✅ Файл {file_name} присутствует в {local_folder}!")
     else:
         print(f"❌ Файл {file_name} НЕ скачался!")
 
