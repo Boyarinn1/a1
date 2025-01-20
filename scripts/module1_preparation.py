@@ -25,11 +25,6 @@ if RUNNING_IN_GITHUB and not GH_TOKEN:
 # Передаём GH_TOKEN в окружение GitHub CLI
 if GH_TOKEN:
     os.environ["GH_TOKEN"] = GH_TOKEN
-else:
-    print("⚠️ ВНИМАНИЕ: GH_TOKEN не передан! GitHub CLI может не работать.")
-
-if GH_TOKEN:
-    os.environ["GH_TOKEN"] = GH_TOKEN
     print("✅ GH_TOKEN установлен.")
 else:
     print("⚠️ ВНИМАНИЕ: GH_TOKEN не передан! GitHub CLI может не работать.")
@@ -82,13 +77,19 @@ def clear_old_files():
     subprocess.run(["gh", "run", "delete", "downloaded_files"], check=False)
     print("✅ Старые артефакты удалены.")
 
+def delete_old_artifact():
+    print("🗑️ Проверяем, существует ли артефакт downloaded_files...")
+    result = subprocess.run(["gh", "api", "repos/OWNER/REPO/actions/artifacts"], capture_output=True, text=True)
 
-def restore_files_from_artifacts():
-    """Скачивает артефакты обратно в рабочую папку."""
-    print("📥 Восстановление файлов из артефактов...")
-    subprocess.run(["gh", "run", "download", "--name", "downloaded_files", "--dir", DOWNLOAD_DIR], check=False)
-    print(f"✅ Файлы восстановлены в {DOWNLOAD_DIR}")
+    if "downloaded_files" in result.stdout:
+        print("🗑️ Удаляем артефакт downloaded_files...")
+        subprocess.run(["gh", "api", "-X", "DELETE", "/repos/OWNER/REPO/actions/artifacts/ID"], check=False)
+        print("✅ Артефакт deleted_files удалён.")
+    else:
+        print("⚠️ Артефакт downloaded_files не найден, пропускаем удаление.")
 
+
+delete_old_artifact()
 
 def download_new_files():
     """Загружает новую неопубликованную группу файлов из B2."""
