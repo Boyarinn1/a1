@@ -13,6 +13,11 @@ if os.path.exists(script_path):
 else:
     print(f"❌ Ошибка: {script_path} не найден!")
 
+    try:
+        from some_module import send_poll  # Заменить `some_module` на правильный модуль
+    except ImportError:
+        print("⚠️ Ошибка: send_poll() не найден!")
+
 # Используем правильный путь
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
@@ -21,6 +26,8 @@ print(f"📂 DOWNLOAD_DIR перед публикацией: {os.listdir(DOWNLOA
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
 
 
 def find_json_mp4_pairs():
@@ -77,7 +84,20 @@ def send_message(bot_token, chat_id, message):
     print(f"📩 Ответ Telegram API: {response.status_code} {response.json()}")
 
 
-import json
+def extract_poll(post_data):
+    """Извлекает данные для опроса из JSON."""
+    poll = post_data.get("poll", {})
+    if not poll:
+        return None
+
+    question = poll.get("question", "Без вопроса")
+    options = [opt.get("text", "") for opt in poll.get("options", []) if "text" in opt]
+
+    if not options:
+        return None
+
+    return {"question": question, "options": options}
+
 
 def main():
     pair = find_json_mp4_pairs()
@@ -99,6 +119,7 @@ def main():
     message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
     send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
 
+    
     poll_data = extract_poll(post_data)
     if poll_data:
         send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
@@ -107,3 +128,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
