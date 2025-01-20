@@ -33,12 +33,16 @@ def download_file(file_name, local_folder):
     local_path = os.path.join(local_folder, file_name.split("/")[-1])
     print(f"Файл сохраняется в: {local_path}")  # Отладочный вывод пути
 
-    downloaded_file = bucket.download_file_by_name(file_name, local_path)
+    try:
+        downloaded_file = bucket.download_file_by_name(file_name, local_path)
+        print("✅ Файл успешно скачан!")
+    except Exception as e:
+        print(f"❌ Ошибка скачивания {file_name}: {e}")
 
     if os.path.exists(local_path):
-        print("✅ Файл успешно скачан!")
+        print("✅ Файл присутствует в папке!")
     else:
-        print("❌ Ошибка скачивания!")
+        print("❌ Файл НЕ скачался!")
 
 
 def check_downloaded_files():
