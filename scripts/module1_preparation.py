@@ -9,6 +9,12 @@ b2_api = B2Api(info)
 S3_KEY_ID = os.getenv("S3_KEY_ID")
 S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+GH_TOKEN = os.getenv("GH_TOKEN")
+
+if not GH_TOKEN:
+    print("⚠️ ВНИМАНИЕ: GH_TOKEN не установлен! Артефакты не будут загружены.")
+else:
+    os.environ["GH_TOKEN"] = GH_TOKEN
 
 if not S3_KEY_ID or not S3_APPLICATION_KEY or not S3_BUCKET_NAME:
     raise ValueError("❌ Ошибка: Переменные окружения S3_KEY_ID, S3_APPLICATION_KEY или S3_BUCKET_NAME не заданы!")
@@ -60,10 +66,11 @@ def download_new_files():
     json_file = None
     mp4_file = None
 
-    for file_info, _ in bucket.ls("444/", recursive=True):
-        if file_info.endswith(".json"):
-            json_file = file_info
-            mp4_file = file_info.replace(".json", ".mp4")
+    for file_version, _ in bucket.ls("444/", recursive=True):
+        file_name = file_version.file_name  # ✅ Получаем имя файла из FileVersion
+        if file_name.endswith(".json"):
+            json_file = file_name
+            mp4_file = file_name.replace(".json", ".mp4")
             break
 
     if not json_file or not mp4_file:

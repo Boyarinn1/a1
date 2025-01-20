@@ -52,12 +52,6 @@ def send_message(bot_token, chat_id, message):
 
 
 def main():
-    
-    restore_files_from_artifacts()
-    pair = find_json_mp4_pairs()
-    if not pair:
-        return
-
     pair = find_json_mp4_pairs()
     if not pair:
         return
@@ -68,6 +62,10 @@ def main():
 
     message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
     send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
+
+    poll_data = extract_poll(post_data)
+    if poll_data:
+        send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
 
     print(f"✅ Публикация {pair}.json завершена.")
 
