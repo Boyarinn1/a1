@@ -34,8 +34,8 @@ jobs:
           S3_KEY_ID: ${{ secrets.S3_KEY_ID }}
           S3_APPLICATION_KEY: ${{ secrets.S3_APPLICATION_KEY }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python a1/scripts/B2_Content_Download.py
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: python ./a1/scripts/B2_Content_Download.py
 
       - name: Archive downloaded files
         run: zip -r downloaded_files.zip a1/data/downloaded/

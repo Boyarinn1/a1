@@ -1,112 +1,72 @@
 import os
 import json
-import requests
-import re
+import b2sdk.v2
+import subprocess
 
-# Определяем пути
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # scripts/
-BASE_DIR = os.path.dirname(BASE_DIR)  # a1/
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
+# 🔹 Определяем пути
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # a1/
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")  # a1/data/downloaded
+CONFIG_PATH = os.path.join(BASE_DIR, "config", "config_public.json")  # a1/config/config_public.json
 
+# 🔹 Создаём директории, если их нет
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-def find_json_mp4_pairs():
-    """Ищет пары файлов с одинаковыми именами, но разными расширениями (.json и .mp4)"""
-    files = os.listdir(DOWNLOAD_DIR)
-    json_files = {f[:-5] for f in files if f.endswith(".json")}
-    mp4_files = {f[:-4] for f in files if f.endswith(".mp4")}
+# 🔹 Загружаем переменные окружения
+S3_KEY_ID = os.getenv("S3_KEY_ID")
+S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+GH_TOKEN = os.getenv("GH_TOKEN")
 
-    pairs = json_files & mp4_files  # Пересечение имен без расширений
-    return list(pairs)
+# 🔹 Проверка переменных
+if not all([S3_KEY_ID, S3_APPLICATION_KEY, S3_BUCKET_NAME]):
+    raise RuntimeError("❌ Ошибка: Переменные S3_KEY_ID, S3_APPLICATION_KEY или S3_BUCKET_NAME не заданы!")
 
+# 🔹 Авторизация в B2
+print("✅ Авторизация в B2...")
+info = b2sdk.v2.InMemoryAccountInfo()
+b2_api = b2sdk.v2.B2Api(info)
+b2_api.authorize_account("production", S3_KEY_ID, S3_APPLICATION_KEY)
 
-def load_json_data(filename):
-    """Загружает данные из JSON-файла"""
-    json_path = os.path.join(DOWNLOAD_DIR, f"{filename}.json")
-    try:
-        with open(json_path, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except Exception as e:
-        print(f"❌ Ошибка загрузки JSON {json_path}: {e}")
-        return None
+# 🔹 Получаем bucket
+bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
+# 🔹 Поиск файлов в 444/
+print("📥 Поиск файлов в B2 (папка 444/)...")
+files_to_download = []
+for file_version, _ in bucket.ls("444/", recursive=True):
+    if file_version.file_name.endswith((".json", ".mp4", ".png")):  # Фильтр по типам
+        files_to_download.append(file_version.file_name)
 
-def format_message(post_data):
-    topic = post_data.get("topic", {}).get("topic", "🚀 Без темы")  # Заголовок
-    content = post_data.get("text_initial", {}).get("content", "").strip()  # Основной текст
-    sarcasm = post_data.get("sarcasm", {}).get("comment", "").strip()  # Сарказм
+if not files_to_download:
+    print("⚠️ Нет файлов для загрузки. Ожидание новых данных...")
+    # Ставим статус ожидания в config_public.json
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({"status": "waiting", "files": []}, f, indent=4)
+    exit(0)
 
-    if not content:
-        content = "ℹ️ Контент в файле отсутствует или поврежден."
+# 🔹 Загружаем файлы в DOWNLOAD_DIR
+downloaded_files = []
+for file_name in files_to_download:
+    local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
+    print(f"📥 Скачивание {file_name} в {local_path}...")
+    bucket.download_file_by_name(file_name, local_path)
+    downloaded_files.append(os.path.basename(file_name))
 
-    return f"""🏛 **{topic}**
+print("✅ Загрузка завершена. Загруженные файлы:", downloaded_files)
 
-{content}
+# 🔹 Записываем список файлов в config_public.json
+with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+    json.dump({"status": "ready", "files": downloaded_files}, f, indent=4)
 
-〰〰〰〰〰〰〰〰〰〰〰〰
+# 🔹 Если работаем в GitHub Actions, создаём артефакт
+if os.getenv("GITHUB_ACTIONS"):
+    print("📂 Загружаем файлы как артефакт в GitHub Actions...")
 
-🎭 *{sarcasm.capitalize()}*"""
+    # Проверяем, передан ли GH_TOKEN
+    if not GH_TOKEN:
+        print("⚠️ Ошибка: GH_TOKEN не установлен! Артефакты не будут загружены.")
+    else:
+        subprocess.run(["zip", "-r", "downloaded_files.zip", DOWNLOAD_DIR], check=True)
+        subprocess.run(["gh", "artifact", "upload", "downloaded_files", DOWNLOAD_DIR], check=True)
 
-
-def extract_poll(post_data):
-    raw_poll = post_data.get("sarcasm", {}).get("poll", "").strip()
-    if not raw_poll:
-        print("❌ Опрос отсутствует в JSON!")
-        return None
-    try:
-        raw_poll = raw_poll.replace("'", '"')
-        poll_json = json.loads(f"{{{raw_poll}}}")
-        question = poll_json.get("question", "")
-        options = poll_json.get("options", [])
-        if not question or len(options) < 2 or len(options) > 10:
-            print(f"❌ Ошибка: Опрос некорректен! (question={question}, options={options})")
-            return None
-        poll_data = {"question": question, "options": options}
-        print(f"✅ Опрос успешно обработан! Вопрос: {question}")
-        return poll_data
-    except Exception as e:
-        print(f"❌ Ошибка парсинга poll: {e}\nИсходный poll: {raw_poll}")
-        return None
-
-
-def send_poll(bot_token, chat_id, poll_question, poll_options):
-    payload = {
-        "chat_id": chat_id,
-        "question": poll_question,
-        "options": poll_options,
-        "is_anonymous": True,
-        "type": "regular"
-    }
-    response = requests.post(f"https://api.telegram.org/bot{bot_token}/sendPoll", json=payload)
-    print(f"📩 Ответ Telegram API (опрос): {response.status_code} {response.json()}")
-    return response
-
-
-def send_message(bot_token, chat_id, message):
-    payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
-    response = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json=payload)
-    print(f"📩 Ответ Telegram API: {response.status_code} {response.json()}")
-    return response
-
-
-def main():
-    bot_token = os.getenv("TELEGRAM_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-
-    pairs = find_json_mp4_pairs()
-    if not pairs:
-        print("⚠️ Нет пар файлов .json + .mp4. Завершаем работу.")
-        return
-
-    for filename in pairs:
-        post_data = load_json_data(filename)
-        if not post_data:
-            continue
-        message = format_message(post_data)
-        send_message(bot_token, chat_id, message)
-        poll_data = extract_poll(post_data)
-        if poll_data:
-            send_poll(bot_token, chat_id, poll_data["question"], poll_data["options"])
-
-
-if __name__ == "__main__":
-    main()
+print("🚀 Скрипт завершён.")
