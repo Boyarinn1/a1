@@ -123,21 +123,25 @@ def download_new_files():
 
 def check_artifacts():
     print("📥 Проверяем доступные артефакты...")
-    result = subprocess.run(["gh", "api", "repos/${{ github.repository }}/actions/artifacts"], capture_output=True,
-                            text=True)
+
+    result = subprocess.run(["gh", "api", f"repos/Boyarinn1/a1/actions/artifacts"], capture_output=True, text=True)
+
+    print(f"📥 API Response: {result.stdout}")  # Показывает ответ API
 
     try:
         artifacts = json.loads(result.stdout)
-        if not artifacts["artifacts"]:
-            print("⚠️ Нет доступных артефактов.")
-            return False
-        for artifact in artifacts["artifacts"]:
-            print(f"📂 Найден артефакт: {artifact['name']}")
-        return True
     except json.JSONDecodeError:
-        print("❌ Ошибка: Невозможно распарсить список артефактов.")
+        print("❌ Ошибка: API вернул невалидный JSON!")
         return False
 
+    if artifacts.get("total_count", 0) == 0:
+        print("⚠️ Нет доступных артефактов. Ожидание загрузки...")
+        return False
+
+    for artifact in artifacts["artifacts"]:
+        print(f"📂 Найден артефакт: {artifact['name']}")
+
+    return True
 
 if check_artifacts():
     restore_files_from_artifacts()
