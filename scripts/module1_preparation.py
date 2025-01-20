@@ -11,6 +11,23 @@ S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 GH_TOKEN = os.getenv("GH_TOKEN")
 
+RUNNING_IN_GITHUB = os.getenv("GITHUB_ACTIONS") == "true"
+
+# Выводим отладочную информацию
+print(f"✅ GH_TOKEN: {'установлен' if GH_TOKEN else '❌ НЕ установлен'}")
+print(f"✅ S3_KEY_ID: {'установлен' if S3_KEY_ID else '❌ НЕ установлен'}")
+print(f"✅ S3_APPLICATION_KEY: {'установлен' if S3_APPLICATION_KEY else '❌ НЕ установлен'}")
+print(f"✅ S3_BUCKET_NAME: {'установлен' if S3_BUCKET_NAME else '❌ НЕ установлен'}")
+
+if RUNNING_IN_GITHUB and not GH_TOKEN:
+    raise RuntimeError("❌ GH_TOKEN отсутствует в GitHub Actions!")
+
+# Передаём GH_TOKEN в окружение GitHub CLI
+if GH_TOKEN:
+    os.environ["GH_TOKEN"] = GH_TOKEN
+else:
+    print("⚠️ ВНИМАНИЕ: GH_TOKEN не передан! GitHub CLI может не работать.")
+
 if GH_TOKEN:
     os.environ["GH_TOKEN"] = GH_TOKEN
     print("✅ GH_TOKEN установлен.")

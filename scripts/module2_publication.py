@@ -83,20 +83,6 @@ def send_message(bot_token, chat_id, message):
     print(f"📩 Ответ Telegram API: {response.status_code} {response.json()}")
 
 
-def extract_poll(post_data):
-    """Извлекает данные для опроса из JSON."""
-    poll = post_data.get("poll", {})
-    if not poll:
-        return None
-
-    question = poll.get("question", "Без вопроса")
-    options = [opt.get("text", "") for opt in poll.get("options", []) if "text" in opt]
-
-    if not options:
-        return None
-
-    return {"question": question, "options": options}
-
 
 def main():
     pair = find_json_mp4_pairs()
@@ -108,7 +94,6 @@ def main():
         return
 
     # ✅ Проверяем, является ли `post_data` строкой, и парсим JSON
-
     if isinstance(post_data, str):
         try:
             post_data = json.loads(post_data)
@@ -119,7 +104,6 @@ def main():
     message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
     send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
 
-
     poll_data = extract_poll(post_data)
     if poll_data:
         send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
@@ -128,4 +112,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
