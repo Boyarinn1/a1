@@ -24,10 +24,9 @@ DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
 
 print(f"📂 DOWNLOAD_DIR перед публикацией: {os.listdir(DOWNLOAD_DIR) if os.path.exists(DOWNLOAD_DIR) else '❌ Папка не найдена'}")
 
+GH_TOKEN = os.getenv("GH_TOKEN")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-
 
 
 def find_json_mp4_pairs():
@@ -109,6 +108,7 @@ def main():
         return
 
     # ✅ Проверяем, является ли `post_data` строкой, и парсим JSON
+
     if isinstance(post_data, str):
         try:
             post_data = json.loads(post_data)
@@ -119,7 +119,7 @@ def main():
     message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
     send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
 
-    
+
     poll_data = extract_poll(post_data)
     if poll_data:
         send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])

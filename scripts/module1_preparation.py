@@ -11,13 +11,16 @@ S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 GH_TOKEN = os.getenv("GH_TOKEN")
 
-GH_TOKEN = os.getenv("GH_TOKEN")
 if GH_TOKEN:
     os.environ["GH_TOKEN"] = GH_TOKEN
     print("✅ GH_TOKEN установлен.")
 else:
     print("⚠️ ВНИМАНИЕ: GH_TOKEN не передан! GitHub CLI может не работать.")
 
+if not S3_KEY_ID or not S3_APPLICATION_KEY or not S3_BUCKET_NAME:
+    print("❌ Ошибка: Переменные окружения S3_KEY_ID, S3_APPLICATION_KEY или S3_BUCKET_NAME не заданы!")
+    print("⚠️ Используй команду `set S3_KEY_ID=your_key_id` перед запуском.")
+    exit(1)  # Завершаем скрипт, но не выбрасываем исключение
 
 print("🔄 module1_preparation.py запущен!")
 
