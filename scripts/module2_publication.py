@@ -26,6 +26,22 @@ def find_json_mp4_pairs():
 
     return pairs[0]  # Берём первую доступную пару
 
+
+def extract_poll(post_data):
+    """Извлекает данные для опроса из JSON."""
+    poll = post_data.get("poll", {})
+    if not poll:
+        return None
+
+    question = poll.get("question", "Без вопроса")
+    options = [opt.get("text", "") for opt in poll.get("options", [])]
+
+    if not options:
+        return None
+
+    return {"question": question, "options": options}
+
+
 def restore_files_from_artifacts():
     """Скачивает артефакты перед публикацией."""
     print("📥 Восстановление файлов из артефактов перед публикацией...")
@@ -63,15 +79,11 @@ def main():
     message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
     send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
 
-    poll_data = extract_poll(post_data)
+    poll_data = extract_poll(post_data)  # ✅ Теперь функция определена
     if poll_data:
         send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
 
     print(f"✅ Публикация {pair}.json завершена.")
-
-    # ✅ После публикации запускаем module1_preparation.py
-    print("🚀 Запуск module1_preparation.py для загрузки новой группы файлов...")
-    subprocess.run(["python", "scripts/module1_preparation.py"], check=True)
 
 
 if __name__ == "__main__":
