@@ -30,8 +30,8 @@ jobs:
           echo "S3_BUCKET_NAME=$S3_BUCKET_NAME"
 
       - name: Debug Repository Structure
-        run: dir /s
-        shell: cmd
+        run: Get-ChildItem -Path . -Recurse
+        shell: pwsh
 
       - name: Ensure downloaded directory exists
         run: mkdir -p a1/data/downloaded
