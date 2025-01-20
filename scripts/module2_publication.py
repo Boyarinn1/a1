@@ -1,113 +1,41 @@
 import os
 import json
-import requests
-import subprocess
 
-script_path = "scripts/module1_preparation.py"
-
-if os.path.exists(script_path):
-    print(f"🚀 Запускаем {script_path} ...")
-    result = subprocess.run(["python", script_path], capture_output=True, text=True)
-    print(f"📜 Лог module1_preparation.py:\n{result.stdout}")
-    print(f"⚠️ Ошибки:\n{result.stderr}")
-else:
-    print(f"❌ Ошибка: {script_path} не найден!")
-
-    try:
-        from some_module import send_poll  # Заменить `some_module` на правильный модуль
-    except ImportError:
-        print("⚠️ Ошибка: send_poll() не найден!")
-
-# Используем правильный путь
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
 
-print(f"📂 DOWNLOAD_DIR перед публикацией: {os.listdir(DOWNLOAD_DIR) if os.path.exists(DOWNLOAD_DIR) else '❌ Папка не найдена'}")
-
-GH_TOKEN = os.getenv("GH_TOKEN")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-
-def find_json_mp4_pairs():
-    """Ищет единственную пару файлов (JSON + MP4) для публикации."""
-    files = os.listdir(DOWNLOAD_DIR)
-    json_files = {f[:-5] for f in files if f.endswith(".json")}
-    mp4_files = {f[:-4] for f in files if f.endswith(".mp4")}
-    pairs = list(json_files & mp4_files)
-
-    if not pairs:
-        print("⚠️ Нет непубликованных файлов! Ожидание новых загрузок.")
-        return None
-
-    return pairs[0]  # Берём первую доступную пару
-
-
-def extract_poll(post_data):
-    """Извлекает данные для опроса из JSON."""
-    poll = post_data.get("poll", {})
-    if not poll:
-        return None
-
-    question = poll.get("question", "Без вопроса")
-    options = [opt.get("text", "") for opt in poll.get("options", [])]
-
-    if not options:
-        return None
-
-    return {"question": question, "options": options}
-
-
-def restore_files_from_artifacts():
-    """Скачивает артефакты перед публикацией."""
-    print("📥 Восстановление файлов из артефактов перед публикацией...")
-    subprocess.run(["gh", "run", "download", "--name", "downloaded_files", "--dir", DOWNLOAD_DIR], check=False)
-    print(f"✅ Файлы восстановлены в {DOWNLOAD_DIR}")
-
+if not os.path.exists(DOWNLOAD_DIR):
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def load_json_data(filename):
-    """Загружает JSON-данные."""
-    json_path = os.path.join(DOWNLOAD_DIR, f"{filename}.json")
+    """Загружает JSON-файл, если он существует."""
+    path = os.path.join(DOWNLOAD_DIR, filename)
+    if not os.path.exists(path):
+        print(f"❌ Файл {filename} не найден!")
+        return None
     try:
-        with open(json_path, "r", encoding="utf-8") as file:
+        with open(path, "r", encoding="utf-8") as file:
             return json.load(file)
-    except Exception as e:
-        print(f"❌ Ошибка загрузки JSON {json_path}: {e}")
+    except json.JSONDecodeError:
+        print(f"❌ Ошибка чтения JSON в {filename}")
         return None
 
-
-def send_message(bot_token, chat_id, message):
-    """Отправляет сообщение в Telegram."""
-    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
-    response = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json=payload)
-    print(f"📩 Ответ Telegram API: {response.status_code} {response.json()}")
-
-
 def main():
-    pair = find_json_mp4_pairs()
-    if not pair:
-        return
+    """Основной процесс публикации."""
+    print("🚀 Запуск публикации...")
+    json_filename = "20250116-1932.json"
 
-    post_data = load_json_data(pair)
-    if not post_data:
-        return
+    post_data = load_json_data(json_filename)
 
-    # ✅ Проверяем, является ли `post_data` строкой, и парсим JSON
-    if isinstance(post_data, str):
+    if isinstance(post_data, str):  # ✅ Гарантируем, что JSON загружается корректно
         try:
             post_data = json.loads(post_data)
         except json.JSONDecodeError:
-            print(f"❌ Ошибка: post_data содержит некорректный JSON!\n{post_data}")
-            exit(1)
+            print("❌ Ошибка: Некорректный JSON!")
+            return
 
-    message = f"🏛 {post_data.get('topic', {}).get('topic', 'Без темы')}\n\n{post_data.get('text_initial', {}).get('content', 'ℹ️ Контент отсутствует.')}"
-    send_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
-
-    poll_data = extract_poll(post_data)
-    if poll_data:
-        send_poll(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, poll_data["question"], poll_data["options"])
-
-    print(f"✅ Публикация {pair}.json завершена.")
+    message = f"🏛 {post_data.get('topic', 'Без темы')}\n\n{post_data.get('text', 'ℹ️ Контент отсутствует.')}"
+    print(f"📩 Отправка сообщения: {message}")
 
 if __name__ == "__main__":
     main()

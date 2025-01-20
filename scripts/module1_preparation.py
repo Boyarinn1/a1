@@ -1,7 +1,6 @@
 import os
 import subprocess
 import json
-
 from b2sdk.v2 import B2Api, InMemoryAccountInfo
 
 # 🔄 Авторизация в B2
@@ -28,20 +27,6 @@ if RUNNING_IN_GITHUB and not GH_TOKEN:
 if GH_TOKEN:
     os.environ["GH_TOKEN"] = GH_TOKEN
     print("✅ GH_TOKEN установлен.")
-else:
-    print("⚠️ ВНИМАНИЕ: GH_TOKEN не передан! GitHub CLI может не работать.")
-
-if not S3_KEY_ID or not S3_APPLICATION_KEY or not S3_BUCKET_NAME:
-    print("❌ Ошибка: Переменные окружения S3_KEY_ID, S3_APPLICATION_KEY или S3_BUCKET_NAME не заданы!")
-    print("⚠️ Используй команду `set S3_KEY_ID=your_key_id` перед запуском.")
-    exit(1)  # Завершаем скрипт, но не выбрасываем исключение
-
-print("🔄 module1_preparation.py запущен!")
-
-if not GH_TOKEN:
-    print("⚠️ ВНИМАНИЕ: GH_TOKEN не установлен! Артефакты не будут загружены.")
-else:
-    os.environ["GH_TOKEN"] = GH_TOKEN
 
 if not S3_KEY_ID or not S3_APPLICATION_KEY or not S3_BUCKET_NAME:
     raise ValueError("❌ Ошибка: Переменные окружения S3_KEY_ID, S3_APPLICATION_KEY или S3_BUCKET_NAME не заданы!")
@@ -58,7 +43,6 @@ try:
 except Exception as e:
     raise RuntimeError(f"❌ Ошибка при получении bucket'а {S3_BUCKET_NAME}: {e}")
 
-# ✅ Используем тот же путь, что и в `module2_publication.py`
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
 
@@ -67,31 +51,47 @@ if not os.path.exists(DOWNLOAD_DIR):
 
 
 def clear_old_files():
-    """Удаляет старые файлы из артефактов и рабочей папки."""
+    """Удаляет старые файлы, но сохраняет системные файлы."""
     print(f"🗑️ Очистка {DOWNLOAD_DIR}...")
     for file in os.listdir(DOWNLOAD_DIR):
+        if file in [".gitkeep", ".DS_Store"]:
+            continue
         file_path = os.path.join(DOWNLOAD_DIR, file)
         os.remove(file_path)
     print("✅ Папка очищена.")
 
-    # Удаляем старые артефакты из GitHub Actions
-    print("🗑️ Удаление старых артефактов из GitHub...")
-    subprocess.run(["gh", "run", "delete", "downloaded_files"], check=False)
-    print("✅ Старые артефакты удалены.")
 
-def delete_old_artifact():
-    print("🗑️ Проверяем, существует ли артефакт downloaded_files...")
-    result = subprocess.run(["gh", "api", "repos/OWNER/REPO/actions/artifacts"], capture_output=True, text=True)
+def check_artifacts():
+    """Проверяет доступные артефакты в GitHub Actions."""
+    print("📥 Проверяем доступные артефакты...")
+    result = subprocess.run(["gh", "api", "repos/Boyarinn1/a1/actions/artifacts"], capture_output=True, text=True)
 
-    if "downloaded_files" in result.stdout:
-        print("🗑️ Удаляем артефакт downloaded_files...")
-        subprocess.run(["gh", "api", "-X", "DELETE", "/repos/OWNER/REPO/actions/artifacts/ID"], check=False)
-        print("✅ Артефакт deleted_files удалён.")
+    try:
+        artifacts = json.loads(result.stdout)
+        if artifacts.get("total_count", 0) == 0:
+            print("⚠️ Нет доступных артефактов.")
+            return False
+    except json.JSONDecodeError:
+        print("❌ Ошибка: API вернул невалидный JSON!")
+        return False
+
+    return True
+
+
+def restore_files_from_artifacts():
+    """Восстанавливает файлы из артефактов, если они есть."""
+    print("📥 Восстановление файлов из артефактов...")
+    artifact_name = "downloaded_files"
+
+    result = subprocess.run(["gh", "api", "repos/Boyarinn1/a1/actions/artifacts"], capture_output=True, text=True)
+
+    if artifact_name in result.stdout:
+        print(f"✅ Артефакт {artifact_name} найден. Восстанавливаем файлы...")
+        os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+        subprocess.run(["gh", "run", "download", "--name", artifact_name, "--dir", DOWNLOAD_DIR], check=False)
     else:
-        print("⚠️ Артефакт downloaded_files не найден, пропускаем удаление.")
+        print(f"⚠️ Артефакт {artifact_name} не найден, пропускаем восстановление.")
 
-
-delete_old_artifact()
 
 def download_new_files():
     """Загружает новую неопубликованную группу файлов из B2."""
@@ -100,7 +100,7 @@ def download_new_files():
     mp4_file = None
 
     for file_version, _ in bucket.ls("444/", recursive=True):
-        file_name = file_version.file_name  # ✅ Получаем имя файла из FileVersion
+        file_name = file_version.file_name
         if file_name.endswith(".json"):
             json_file = file_name
             mp4_file = file_name.replace(".json", ".mp4")
@@ -121,54 +121,8 @@ def download_new_files():
             print(f"❌ Ошибка загрузки {file_name}: {e}")
 
 
-def check_artifacts():
-    print("📥 Проверяем доступные артефакты...")
-
-    result = subprocess.run(["gh", "api", f"repos/Boyarinn1/a1/actions/artifacts"], capture_output=True, text=True)
-
-    print(f"📥 API Response: {result.stdout}")  # Показывает ответ API
-
-    try:
-        artifacts = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        print("❌ Ошибка: API вернул невалидный JSON!")
-        return False
-
-    if artifacts.get("total_count", 0) == 0:
-        print("⚠️ Нет доступных артефактов. Ожидание загрузки...")
-        return False
-
-    for artifact in artifacts["artifacts"]:
-        print(f"📂 Найден артефакт: {artifact['name']}")
-
-    return True
-
-if check_artifacts():
-    restore_files_from_artifacts()
-else:
-    print("⚠️ Пропускаем восстановление артефактов.")
-
-
-def restore_files_from_artifacts():
-    print("📥 Восстановление файлов из артефактов...")
-    artifact_name = "downloaded_files"
-
-    # Получаем список артефактов
-    result = subprocess.run(["gh", "api", "repos/Boyarinn1/a1/actions/artifacts"], capture_output=True, text=True)
-
-    if artifact_name in result.stdout:
-        print(f"✅ Артефакт {artifact_name} найден. Восстанавливаем файлы...")
-        os.makedirs("/home/runner/work/a1/a1/data/downloaded", exist_ok=True)
-        subprocess.run(["gh", "run", "download", "--name", artifact_name], check=False)
-        print("✅ Файлы успешно восстановлены из артефактов.")
-    else:
-        print(f"⚠️ Артефакт {artifact_name} не найден, пропускаем восстановление.")
-
-
-restore_files_from_artifacts()
-
-
 if __name__ == "__main__":
-    clear_old_files()  # Удаляем старую группу
-    restore_files_from_artifacts()  # Восстанавливаем файлы из артефактов
-    download_new_files()  # Загружаем новые файлы из B2
+    clear_old_files()
+    if check_artifacts():
+        restore_files_from_artifacts()
+    download_new_files()
