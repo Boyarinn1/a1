@@ -119,6 +119,29 @@ def download_new_files():
             print(f"❌ Ошибка загрузки {file_name}: {e}")
 
 
+import subprocess
+import os
+
+
+def restore_files_from_artifacts():
+    print("📥 Восстановление файлов из артефактов...")
+    artifact_name = "downloaded_files"
+
+    # Получаем список артефактов
+    result = subprocess.run(["gh", "api", "repos/Boyarinn1/a1/actions/artifacts"], capture_output=True, text=True)
+
+    if artifact_name in result.stdout:
+        print(f"✅ Артефакт {artifact_name} найден. Восстанавливаем файлы...")
+        os.makedirs("/home/runner/work/a1/a1/data/downloaded", exist_ok=True)
+        subprocess.run(["gh", "run", "download", "--name", artifact_name], check=False)
+        print("✅ Файлы успешно восстановлены из артефактов.")
+    else:
+        print(f"⚠️ Артефакт {artifact_name} не найден, пропускаем восстановление.")
+
+
+restore_files_from_artifacts()
+
+
 if __name__ == "__main__":
     clear_old_files()  # Удаляем старую группу
     restore_files_from_artifacts()  # Восстанавливаем файлы из артефактов
