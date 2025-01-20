@@ -44,7 +44,7 @@ jobs:
       - name: Archive downloaded files
         run: zip -r downloaded_files.zip data/downloaded/
 
-      - name: Upload artifact
+      - name: Upload downloaded files as artifact
         uses: actions/upload-artifact@v3
         with:
           name: downloaded_files

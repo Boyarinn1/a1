@@ -67,6 +67,7 @@ if os.getenv("GITHUB_ACTIONS"):
         print("⚠️ Ошибка: GH_TOKEN не установлен! Артефакты не будут загружены.")
     else:
         subprocess.run(["zip", "-r", "downloaded_files.zip", DOWNLOAD_DIR], check=True)
-        subprocess.run(["gh", "artifact", "upload", "downloaded_files", DOWNLOAD_DIR], check=True)
+        print("⚠️ Используйте GitHub Actions для загрузки артефактов. Скрипт не может выполнить upload сам.")
+
 
 print("🚀 Скрипт завершён.")
