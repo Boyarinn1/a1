@@ -37,6 +37,9 @@ jobs:
           echo "Checking existing directories..."
           find . -type d | sort
 
+      - name: Create downloaded directory
+        run: mkdir -p data/downloaded
+
       - name: Run module2_publication.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -45,15 +48,18 @@ jobs:
           S3_APPLICATION_KEY: ${{ secrets.S3_APPLICATION_KEY }}
           S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export S3_KEY_ID=${{ secrets.S3_KEY_ID }}
           export S3_APPLICATION_KEY=${{ secrets.S3_APPLICATION_KEY }}
           export S3_ENDPOINT=${{ secrets.S3_ENDPOINT }}
           export S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
+          export GH_TOKEN=${{ secrets.GITHUB_TOKEN }}
           echo "S3_KEY_ID = $S3_KEY_ID"
           echo "S3_APPLICATION_KEY = $S3_APPLICATION_KEY"
           echo "S3_ENDPOINT = $S3_ENDPOINT"
           echo "S3_BUCKET_NAME = $S3_BUCKET_NAME"
+          echo "GH_TOKEN = $GH_TOKEN"
           python scripts/module2_publication.py
 
       - name: Archive downloaded file
