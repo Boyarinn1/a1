@@ -4,7 +4,7 @@ name: B2 Content Download
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"  # Запуск каждый час
+    - cron: "0 * * * *"
 
 jobs:
   download:
@@ -42,28 +42,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python scripts/B2_Content_Download.py
 
-      - name: Archive downloaded files
-        run: zip -r downloaded_files.zip ${{ github.workspace }}/data/downloaded/
+      - name: Move downloaded files to workspace
+        run: |
+          mv /home/runner/work/a1/a1/data/downloaded/* ${{ github.workspace }}/data/downloaded/
+        shell: bash
 
-      - name: "Debug List downloaded files"
+      - name: Debug List downloaded files
         run: |
           echo "Listing files in downloaded folder:"
           ls -R ${{ github.workspace }}/data/downloaded/
         shell: bash
 
-      - name: Debug Проверка наличия скачанных файлов
-        run: |
-          echo "Checking files with details:"
-          ls -lah ${{ github.workspace }}/data/downloaded/
-        shell: bash
-
-      - name: Debug GitHub Artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh api repos/${{ github.repository }}/actions/artifacts
-
       - name: Upload downloaded files as artifact
         uses: actions/upload-artifact@v3
         with:
           name: downloaded_files
-          path: ${{ github.workspace }}/data/downloaded/*
+          path: ${{ github.workspace }}/data/downloaded/
