@@ -31,7 +31,7 @@ jobs:
         shell: bash
 
       - name: Ensure downloaded directory exists
-        run: mkdir -p ${{ github.workspace }}/data/downloaded && touch ${{ github.workspace }}/data/downloaded/.gitkeep
+        run: mkdir -p data/downloaded && touch data/downloaded/.gitkeep
         shell: bash
 
       - name: Run B2_Content_Download.py
@@ -42,25 +42,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python scripts/B2_Content_Download.py
 
-      - name: Debug Проверка имен файлов перед mv
+      - name: Debug: Проверка наличия скачанных файлов перед upload-artifact
         run: |
-          echo "Файлы перед перемещением:"
-          find /home/runner/work/a1/a1/data/downloaded/ -type f || echo "❌ Нет файлов для перемещения!"
-        shell: bash
-
-      - name: Move downloaded files to workspace
-        run: |
-          find /home/runner/work/a1/a1/data/downloaded/ -type f -exec mv {} ${{ github.workspace }}/data/downloaded/ \;
-        shell: bash
-
-      - name: Debug List downloaded files
-        run: |
-          echo "Listing files in downloaded folder:"
-          ls -R ${{ github.workspace }}/data/downloaded/
+          echo "Содержимое папки data/downloaded/:"
+          ls -lah data/downloaded/ || echo "❌ Папка пуста!"
         shell: bash
 
       - name: Upload downloaded files as artifact
         uses: actions/upload-artifact@v3
         with:
           name: downloaded_files
-          path: ${{ github.workspace }}/data/downloaded/
+          path: data/downloaded/
