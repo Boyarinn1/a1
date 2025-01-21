@@ -40,6 +40,8 @@ jobs:
           S3_APPLICATION_KEY: ${{ secrets.S3_APPLICATION_KEY }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scripts/B2_Content_Download.py
 
       - name: Debug Проверка файлов в рабочем пространстве
