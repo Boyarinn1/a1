@@ -39,12 +39,18 @@ async def process_files():
     """Функция обработки и отправки JSON-файлов в Telegram"""
 
     # 🔍 Отладка: очищаем локальную папку перед загрузкой
-    print("🗑 Очистка локальной папки перед загрузкой...")
+    print("🗑 Полная очистка локальной папки перед скачиванием...")
     shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    # 🔍 Отладка: получаем список файлов из B2
-    print("📥 Запрашиваем актуальный список файлов в B2 (папка 444/)...")
+    # 🔍 Полный листинг папок в B2
+    for folder in ["444/", "555/", "666/"]:
+        print(f"\n📁 Список файлов в папке {folder}:")
+        for file_version, _ in bucket.ls(folder, recursive=True):
+            print(f"  🔹 {file_version.file_name}")
+
+    # 🔍 Отладка: получаем список файлов из B2 (только из 444/)
+    print("\n📥 Запрашиваем актуальный список файлов в B2 (папка 444/)...")
     files_to_download = []
     for file_version, _ in bucket.ls("444/", recursive=True):
         files_to_download.append(file_version.file_name)
@@ -61,6 +67,11 @@ async def process_files():
 
     for file_name in files_to_download:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
+
+        # Пропускаем не JSON-файлы
+        if not file_name.endswith(".json"):
+            print(f"⏭ Пропускаем файл {file_name} (не JSON)")
+            continue
 
         try:
             # 🔍 Отладка: скачивание файла
