@@ -55,8 +55,14 @@ jobs:
           ls -lah ${{ github.workspace }}/data/downloaded/
         shell: bash
 
+      - name: Debug GitHub Artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api repos/${{ github.repository }}/actions/artifacts
+
       - name: Upload downloaded files as artifact
         uses: actions/upload-artifact@v3
         with:
           name: downloaded_files
-          path: /home/runner/work/a1/a1/data/downloaded/
+          path: data/downloaded/
+
