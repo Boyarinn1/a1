@@ -97,7 +97,7 @@ async def process_files():
 
             # 🔍 Проверяем, что data — словарь
             if not isinstance(data, dict):
-                print(f"🚨 Ошибка: После обработки {file_name} всё ещё не является JSON-объектом!")
+                print(f"🚨 Ошибка: JSON загружен в неправильном формате! Полный JSON:\n{data}")
                 continue
 
             # 🔹 Извлекаем данные
@@ -108,7 +108,7 @@ async def process_files():
             poll = data.get("sarcasm", {}).get("poll", "")
 
             # 🔹 Формируем сообщение по шаблону
-            message = f"**{topic}**\n\n{text_content}"
+            message = f"📜 **Полное содержимое JSON:**\n```\n{json.dumps(data, indent=4, ensure_ascii=False)}\n```"
 
             if critique:
                 message += f"\n\n💡 **Критический разбор**\n{critique}"
