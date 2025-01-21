@@ -13,7 +13,7 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config", "config_public.json")  # a1/confi
 S3_KEY_ID = os.getenv("S3_KEY_ID")
 S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-S3_ENDPOINT = os.getenv("S3_ENDPOINT", "production")  # Значение по умолчанию
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "production")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -67,15 +67,17 @@ for file_name in files_to_download:
         elif "topic" in data and isinstance(data["topic"], dict) and "topic" in data["topic"]:
             topic_text = data["topic"]["topic"]
 
+        # 🔹 Отправка сообщения в Telegram
         if topic_text:
             message = f"**Топик:** {topic_text}\n\n{data.get('content', 'Контент отсутствует')}"
-            try:
-                bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
-                print(f"✅ Топик опубликован: {file_name}")
-            except TelegramError as e:
-                print(f"🚨 Ошибка отправки сообщения в Telegram: {e}")
         else:
-            print(f"⚠️ Файл {file_name} не содержит ключ 'topik' или 'topic'.")
+            message = f"📜 JSON-файл без ключа 'topik' или 'topic':\n```\n{json.dumps(data, indent=4, ensure_ascii=False)}\n```"
+
+        try:
+            bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
+            print(f"✅ Сообщение отправлено: {file_name}")
+        except TelegramError as e:
+            print(f"🚨 Ошибка отправки в Telegram: {e}")
 
         os.remove(local_path)  # Удаляем файл после обработки
     except Exception as e:
