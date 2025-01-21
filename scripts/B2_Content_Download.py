@@ -33,7 +33,6 @@ b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 # 🔹 Получаем bucket
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
-
 async def process_files():
     """Функция обработки и отправки JSON-файлов в Telegram"""
     files_to_download = []
@@ -62,16 +61,23 @@ async def process_files():
             with open(local_path, "r", encoding="utf-8") as f:
                 data = f.read()  # Читаем файл как строку
 
-            # 🔹 Пробуем разобрать JSON несколько раз
+            # 🔍 Вывод отладочной информации
+            print(f"📂 Загруженные данные ({file_name}): {type(data)}")
+            print(f"🔍 Первые 300 символов файла: {data[:300]}")
+
+            # 🔹 Двойное декодирование JSON
             try:
                 if isinstance(data, str):
-                    data = json.loads(data)  # Первый раз парсим строку в JSON
-
-                if isinstance(data, str):  # Если после первой обработки всё ещё строка
-                    data = json.loads(data)  # Парсим ещё раз
-
+                    data = json.loads(data)  # Пробуем разобрать JSON
+                if isinstance(data, str):
+                    data = json.loads(data)  # Пробуем ещё раз
             except json.JSONDecodeError as e:
-                print(f"❌ Ошибка: Файл {file_name} не является корректным JSON: {e}")
+                print(f"❌ Ошибка разбора JSON в {file_name}: {e}")
+                continue
+
+            # 🔹 Проверяем, что data — словарь
+            if not isinstance(data, dict):
+                print(f"🚨 Ошибка: После обработки {file_name} всё ещё не является JSON-объектом!")
                 continue
 
             # 🔹 Извлекаем данные
@@ -105,7 +111,6 @@ async def process_files():
             print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
 
     print("🚀 Скрипт завершён.")
-
 
 # Запуск асинхронного кода
 if __name__ == "__main__":
