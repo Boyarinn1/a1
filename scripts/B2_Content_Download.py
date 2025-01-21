@@ -55,19 +55,28 @@ if not files_to_download:
 downloaded_files = []
 for file_name in files_to_download:
     local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
-    print(f"📥 Скачивание {file_name} в {local_path}...")
-    bucket.download_file_by_name(file_name, local_path)
-    downloaded_files.append(os.path.basename(file_name))
 
-print("✅ Загрузка завершена. Загруженные файлы:", downloaded_files)
+    try:
+        # 🔹 Проверяем, существует ли файл в B2
+        file_info = bucket.get_file_info_by_name(file_name)
+        print(f"ℹ️ Файл найден в B2: {file_name} (размер: {file_info['contentLength']} байт)")
 
-# 🔹 Проверяем, действительно ли файлы скачались
-for file_name in downloaded_files:
-    local_path = os.path.join(DOWNLOAD_DIR, file_name)
-    if os.path.exists(local_path):
-        print(f"✅ Файл {file_name} скачан успешно в {local_path}")
-    else:
-        print(f"❌ Файл {file_name} ОТСУТСТВУЕТ в {local_path}")
+        # 🔹 Скачивание файла
+        print(f"📥 Скачивание {file_name} в {local_path}...")
+        bucket.download_file_by_name(file_name, local_path)
+
+        # 🔹 Проверяем, скачался ли файл
+        if os.path.exists(local_path):
+            print(f"✅ Файл {file_name} УСПЕШНО скачан в {local_path}")
+            downloaded_files.append(os.path.basename(file_name))
+        else:
+            print(f"❌ ОШИБКА: {file_name} НЕ скачался в {local_path}!")
+
+    except Exception as e:
+        print(f"🚨 Ошибка при скачивании {file_name}: {e}")
+
+# 🔹 Проверяем итоговое содержимое папки
+print(f"📂 Итоговое содержимое {DOWNLOAD_DIR}: {os.listdir(DOWNLOAD_DIR)}")
 
 # 🔹 Записываем список файлов в config_public.json
 with open(CONFIG_PATH, "w", encoding="utf-8") as f:
