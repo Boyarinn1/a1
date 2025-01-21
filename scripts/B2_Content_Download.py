@@ -33,6 +33,7 @@ b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 # 🔹 Получаем bucket
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
+
 async def process_files():
     """Функция обработки и отправки JSON-файлов в Telegram"""
     files_to_download = []
@@ -59,7 +60,14 @@ async def process_files():
 
             # Обрабатываем JSON-файл
             with open(local_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                data = f.read()  # Читаем файл как строку
+
+            # 🔹 Проверяем, если data - строка, парсим JSON
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                print(f"❌ Ошибка: Файл {file_name} не является корректным JSON.")
+                continue
 
             # 🔹 Извлекаем данные
             topic = data.get("topic", {}).get("topic", "Без темы")
@@ -92,6 +100,7 @@ async def process_files():
             print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
 
     print("🚀 Скрипт завершён.")
+
 
 # Запуск асинхронного кода
 if __name__ == "__main__":
