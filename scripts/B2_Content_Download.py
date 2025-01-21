@@ -62,11 +62,16 @@ async def process_files():
             with open(local_path, "r", encoding="utf-8") as f:
                 data = f.read()  # Читаем файл как строку
 
-            # 🔹 Проверяем, если data - строка, парсим JSON
+            # 🔹 Пробуем разобрать JSON несколько раз
             try:
-                data = json.loads(data)
-            except json.JSONDecodeError:
-                print(f"❌ Ошибка: Файл {file_name} не является корректным JSON.")
+                if isinstance(data, str):
+                    data = json.loads(data)  # Первый раз парсим строку в JSON
+
+                if isinstance(data, str):  # Если после первой обработки всё ещё строка
+                    data = json.loads(data)  # Парсим ещё раз
+
+            except json.JSONDecodeError as e:
+                print(f"❌ Ошибка: Файл {file_name} не является корректным JSON: {e}")
                 continue
 
             # 🔹 Извлекаем данные
