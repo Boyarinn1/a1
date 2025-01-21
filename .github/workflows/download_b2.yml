@@ -45,7 +45,7 @@ jobs:
       - name: Archive downloaded files
         run: zip -r downloaded_files.zip data/downloaded/
 
-      - name: Debug: List downloaded files
+      - name: Debug List downloaded files
         run: |
           ls -R data/downloaded/
         shell: bash
