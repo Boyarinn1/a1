@@ -44,15 +44,15 @@ async def process_files():
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
     # 🔍 Полный листинг папок в B2
-    for folder in ["444/", "555/", "666/"]:
+    for folder in ["666/", "555/", "444/"]:
         print(f"\n📁 Список файлов в папке {folder}:")
         for file_version, _ in bucket.ls(folder, recursive=True):
             print(f"  🔹 {file_version.file_name}")
 
     # 🔍 Отладка: получаем список файлов из B2 (только из 444/)
-    print("\n📥 Запрашиваем актуальный список файлов в B2 (папка 444/)...")
+    print("\n📥 Запрашиваем актуальный список файлов в B2 (папка 666/)...")
     files_to_download = []
-    for file_version, _ in bucket.ls("444/", recursive=True):
+    for file_version, _ in bucket.ls("666/", recursive=True):
         files_to_download.append(file_version.file_name)
 
     print(f"📌 Найдено файлов в B2: {len(files_to_download)}")
