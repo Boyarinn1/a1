@@ -44,16 +44,16 @@ jobs:
 
       - name: Debug Проверка наличия скачанных файлов перед mv
         run: |
-          echo "Проверяем файлы в /home/runner/work/a1/a1/data/downloaded/:"
-          ls -lah /home/runner/work/a1/a1/data/downloaded/
+          echo "Содержимое папки перед mv:"
+          ls -lah /home/runner/work/a1/a1/data/downloaded/ || echo "❌ Папка пуста!"
         shell: bash
 
       - name: Move downloaded files to workspace
         run: |
-          if [ "$(ls -A /home/runner/work/a1/a1/data/downloaded/ 2>/dev/null)" ]; then
+          if ls /home/runner/work/a1/a1/data/downloaded/* 1> /dev/null 2>&1; then
             mv /home/runner/work/a1/a1/data/downloaded/* ${{ github.workspace }}/data/downloaded/
           else
-            echo "❌ Нет файлов для перемещения!"
+            echo "❌ Файлы отсутствуют, `mv` не будет выполнен!"
           fi
         shell: bash
 
