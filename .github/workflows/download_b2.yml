@@ -59,4 +59,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: downloaded_files
-          path: ${{ github.workspace }}/data/downloaded/
+          path: /home/runner/work/a1/a1/data/downloaded/
