@@ -45,13 +45,20 @@ jobs:
       - name: Archive downloaded files
         run: zip -r downloaded_files.zip data/downloaded/
 
-      - name: Debug List downloaded files
+
+
+      - name: "Debug: List downloaded files"
         run: |
           ls -R data/downloaded/
+        shell: bash
+
+      - name: Debug Проверка наличия скачанных файлов
+        run: |
+          ls -lah ${{ github.workspace }}/data/downloaded/
         shell: bash
 
       - name: Upload downloaded files as artifact
         uses: actions/upload-artifact@v3
         with:
           name: downloaded_files
-          path: data/downloaded/
+          path: ${{ github.workspace }}/data/downloaded/
