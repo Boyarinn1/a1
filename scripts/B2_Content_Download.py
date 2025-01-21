@@ -2,6 +2,7 @@ import os
 import json
 import b2sdk.v2
 import asyncio
+import shutil
 from telegram import Bot
 from telegram.error import TelegramError
 
@@ -33,49 +34,58 @@ b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 # 🔹 Получаем bucket
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
+
 async def process_files():
     """Функция обработки и отправки JSON-файлов в Telegram"""
-    files_to_download = []
-    print("📥 Поиск файлов в B2 (папка 444/)...")
-    for file_version, _ in bucket.ls("444/", recursive=True):
-        if file_version.file_name.endswith(".json"):  # Ищем только JSON-файлы
-            files_to_download.append(file_version.file_name)
+
+    # 🔍 Отладка: очищаем локальную папку перед загрузкой
+    print("🗑 Очистка локальной папки перед загрузкой...")
+    shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+    # 🔍 Отладка: получаем список файлов из B2
+    print("📥 Запрашиваем актуальный список файлов в B2 (папка 444/)...")
+    files_to_download = [
+        file.file_name
+        for file in bucket.list_file_names("444/")
+    ]
+
+    print(f"📌 Найдено файлов в B2: {len(files_to_download)}")
+    for file_name in files_to_download:
+        print(f"  🔹 {file_name}")
 
     if not files_to_download:
-        print("⚠️ Нет файлов для загрузки. Ожидание новых данных...")
+        print("⚠️ Нет новых файлов для загрузки. Ожидание новых данных...")
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump({"status": "waiting", "files": []}, f, indent=4)
         return
 
-    # 🔹 Создаём директорию для загрузки, если её нет
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
     for file_name in files_to_download:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
+
         try:
-            # Скачиваем файл
+            # 🔍 Отладка: скачивание файла
             print(f"📥 Скачивание {file_name} в {local_path}...")
             bucket.download_file_by_name(file_name).save_to(local_path)
 
-            # Обрабатываем JSON-файл
+            # 🔍 Отладка: проверяем содержимое файла перед обработкой
             with open(local_path, "r", encoding="utf-8") as f:
-                data = f.read()  # Читаем файл как строку
+                data = f.read()
 
-            # 🔍 Вывод отладочной информации
             print(f"📂 Загруженные данные ({file_name}): {type(data)}")
             print(f"🔍 Первые 300 символов файла: {data[:300]}")
 
-            # 🔹 Двойное декодирование JSON
+            # 🔍 Если JSON закодирован в строке, пробуем декодировать дважды
             try:
                 if isinstance(data, str):
-                    data = json.loads(data)  # Пробуем разобрать JSON
+                    data = json.loads(data)
                 if isinstance(data, str):
-                    data = json.loads(data)  # Пробуем ещё раз
+                    data = json.loads(data)
             except json.JSONDecodeError as e:
                 print(f"❌ Ошибка разбора JSON в {file_name}: {e}")
                 continue
 
-            # 🔹 Проверяем, что data — словарь
+            # 🔍 Проверяем, что data — словарь
             if not isinstance(data, dict):
                 print(f"🚨 Ошибка: После обработки {file_name} всё ещё не является JSON-объектом!")
                 continue
@@ -106,11 +116,15 @@ async def process_files():
             except TelegramError as e:
                 print(f"🚨 Ошибка отправки в Telegram: {e}")
 
-            os.remove(local_path)  # Удаляем файл после обработки
+            # 🔍 Отладка: удаляем файл после обработки
+            os.remove(local_path)
+            print(f"🗑 Файл {file_name} удалён после обработки.")
+
         except Exception as e:
             print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
 
     print("🚀 Скрипт завершён.")
+
 
 # Запуск асинхронного кода
 if __name__ == "__main__":
