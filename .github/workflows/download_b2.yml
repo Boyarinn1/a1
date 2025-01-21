@@ -1,7 +1,8 @@
+---
 name: B2 Content Download
 
 on:
-  workflow_dispatch:  # Ручной запуск
+  workflow_dispatch:
   schedule:
     - cron: "0 * * * *"  # Запуск каждый час
 
@@ -45,7 +46,8 @@ jobs:
         run: zip -r downloaded_files.zip data/downloaded/
 
       - name: Debug: List downloaded files
-        run: ls -R $(pwd)/data/downloaded/
+        run: |
+          ls -R data/downloaded/
         shell: bash
 
       - name: Upload downloaded files as artifact
