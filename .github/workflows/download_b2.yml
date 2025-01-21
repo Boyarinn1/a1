@@ -31,7 +31,7 @@ jobs:
         shell: bash
 
       - name: Ensure downloaded directory exists
-        run: mkdir -p data/downloaded && touch data/downloaded/.gitkeep
+        run: mkdir -p ${{ github.workspace }}/data/downloaded && touch ${{ github.workspace }}/data/downloaded/.gitkeep
         shell: bash
 
       - name: Run B2_Content_Download.py
@@ -43,15 +43,17 @@ jobs:
         run: python scripts/B2_Content_Download.py
 
       - name: Archive downloaded files
-        run: zip -r downloaded_files.zip data/downloaded/
+        run: zip -r downloaded_files.zip ${{ github.workspace }}/data/downloaded/
 
       - name: "Debug List downloaded files"
         run: |
-          ls -R data/downloaded/
+          echo "Listing files in downloaded folder:"
+          ls -R ${{ github.workspace }}/data/downloaded/
         shell: bash
 
       - name: Debug Проверка наличия скачанных файлов
         run: |
+          echo "Checking files with details:"
           ls -lah ${{ github.workspace }}/data/downloaded/
         shell: bash
 
@@ -65,4 +67,3 @@ jobs:
         with:
           name: downloaded_files
           path: ${{ github.workspace }}/data/downloaded/*
-
