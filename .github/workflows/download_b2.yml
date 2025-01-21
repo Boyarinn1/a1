@@ -1,3 +1,4 @@
+---
 name: B2 Content Download
 
 on:
@@ -11,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -33,12 +34,6 @@ jobs:
         run: mkdir -p data/downloaded && touch data/downloaded/.gitkeep
         shell: bash
 
-      - name: Restore cache (если файлы уже загружены)
-        uses: actions/cache@v4
-        with:
-          path: data/downloaded/
-          key: downloaded-files-${{ github.run_id }}
-
       - name: Run B2_Content_Download.py
         env:
           S3_KEY_ID: ${{ secrets.S3_KEY_ID }}
@@ -47,14 +42,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python scripts/B2_Content_Download.py
 
-      - name: Save cache (сохранение файлов между запусками)
-        uses: actions/cache@v4
-        with:
-          path: data/downloaded/
-          key: downloaded-files-${{ github.run_id }}
+      - name: Debug Проверка файлов в рабочем пространстве
+        run: |
+          echo "🔍 Поиск всех файлов в контейнере:"
+          find /home/runner/work/a1/a1/ -type f
+        shell: bash
 
-      - name: Debug Проверка наличия скачанных файлов
+      - name: Move downloaded files to correct directory
+        run: |
+          mv /home/runner/work/a1/a1/data/downloaded/* data/downloaded/ || echo "❌ Нет файлов для перемещения!"
+        shell: bash
+
+      - name: Debug Проверка наличия скачанных файлов перед upload-artifact
         run: |
           echo "📂 Содержимое папки data/downloaded/"
           ls -lah data/downloaded/ || echo "❌ Папка пуста!"
         shell: bash
+
+      - name: Upload downloaded files as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded_files
+          path: data/downloaded/*
+          if-no-files-found: error
+          compression-level: 0
