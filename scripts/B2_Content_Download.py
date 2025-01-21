@@ -8,8 +8,15 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # a1/
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")  # a1/data/downloaded
 CONFIG_PATH = os.path.join(BASE_DIR, "config", "config_public.json")  # a1/config/config_public.json
 
+# 🔹 Отладка: Проверяем пути
+print(f"📂 DOWNLOAD_DIR установлен в: {DOWNLOAD_DIR}")
+print(f"📂 Абсолютный путь: {os.path.abspath(DOWNLOAD_DIR)}")
+
 # 🔹 Создаём директории, если их нет
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+# 🔹 Проверка прав доступа к папке
+print(f"📂 Права доступа к {DOWNLOAD_DIR}: {oct(os.stat(DOWNLOAD_DIR).st_mode)}")
 
 # 🔹 Загружаем переменные окружения
 S3_KEY_ID = os.getenv("S3_KEY_ID")
@@ -54,12 +61,17 @@ for file_name in files_to_download:
 
 print("✅ Загрузка завершена. Загруженные файлы:", downloaded_files)
 
+# 🔹 Проверяем, действительно ли файлы скачались
+for file_name in downloaded_files:
+    local_path = os.path.join(DOWNLOAD_DIR, file_name)
+    if os.path.exists(local_path):
+        print(f"✅ Файл {file_name} скачан успешно в {local_path}")
+    else:
+        print(f"❌ Файл {file_name} ОТСУТСТВУЕТ в {local_path}")
+
 # 🔹 Записываем список файлов в config_public.json
 with open(CONFIG_PATH, "w", encoding="utf-8") as f:
     json.dump({"status": "ready", "files": downloaded_files}, f, indent=4)
-
-# 🔹 Проверяем, действительно ли файлы скачались
-print(f"📂 Проверяем содержимое {DOWNLOAD_DIR}: {os.listdir(DOWNLOAD_DIR)}")
 
 # 🔹 Если работаем в GitHub Actions, создаём артефакт
 if os.getenv("GITHUB_ACTIONS"):
