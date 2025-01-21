@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python scripts/B2_Content_Download.py
 
-      - name: Debug: Проверка файлов перед `mv`
+      - name: Debug Проверка файлов перед `mv`
         run: |
           echo "Содержимое папки перед перемещением:"
           ls -lah /home/runner/work/a1/a1/data/downloaded/ || echo "❌ Папка пуста!"
