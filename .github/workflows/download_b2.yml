@@ -42,22 +42,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python scripts/B2_Content_Download.py
 
-      - name: Debug Проверка файлов перед `mv`
+      - name: Debug Проверка имен файлов перед mv
         run: |
-          echo "Содержимое папки перед перемещением:"
-          ls -lah /home/runner/work/a1/a1/data/downloaded/ || echo "❌ Папка пуста!"
-          echo "Поиск всех файлов в рабочем пространстве:"
-          find /home/runner/work/a1/a1/ -type f
+          echo "Файлы перед перемещением:"
+          find /home/runner/work/a1/a1/data/downloaded/ -type f || echo "❌ Нет файлов для перемещения!"
         shell: bash
 
       - name: Move downloaded files to workspace
         run: |
-          if [ "$(ls -A /home/runner/work/a1/a1/data/downloaded/ 2>/dev/null)" ]; then
-            echo "✅ Файлы найдены, перемещаем..."
-            mv /home/runner/work/a1/a1/data/downloaded/* ${{ github.workspace }}/data/downloaded/
-          else
-            echo "❌ Файлы отсутствуют, `mv` не будет выполнен!"
-          fi
+          find /home/runner/work/a1/a1/data/downloaded/ -type f -exec mv {} ${{ github.workspace }}/data/downloaded/ \;
         shell: bash
 
       - name: Debug List downloaded files
