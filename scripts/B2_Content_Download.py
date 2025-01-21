@@ -13,7 +13,7 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config", "config_public.json")  # a1/confi
 S3_KEY_ID = os.getenv("S3_KEY_ID")
 S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-S3_ENDPOINT = os.getenv("S3_ENDPOINT", "production")  # Добавлено значение по умолчанию
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "production")  # Значение по умолчанию
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -32,7 +32,7 @@ b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 # 🔹 Получаем bucket
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
-# 🔹 Поиск файлов в 444/
+# 🔹 Поиск JSON-файлов в папке 444/
 files_to_download = []
 print("📥 Поиск файлов в B2 (папка 444/)...")
 for file_version, _ in bucket.ls("444/", recursive=True):
@@ -41,7 +41,6 @@ for file_version, _ in bucket.ls("444/", recursive=True):
 
 if not files_to_download:
     print("⚠️ Нет файлов для загрузки. Ожидание новых данных...")
-    # Ставим статус ожидания в config_public.json
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump({"status": "waiting", "files": []}, f, indent=4)
     exit(0)
@@ -61,15 +60,22 @@ for file_name in files_to_download:
         with open(local_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        if "topik" in data:  # Если есть ключ 'topik'
-            message = f"**Топик:** {data['topik']}\n\n{data.get('content', 'Контент отсутствует')}"
+        # 🔹 Проверяем наличие ключа 'topik' или 'topic'
+        topic_text = None
+        if "topik" in data:
+            topic_text = data["topik"]
+        elif "topic" in data and isinstance(data["topic"], dict) and "topic" in data["topic"]:
+            topic_text = data["topic"]["topic"]
+
+        if topic_text:
+            message = f"**Топик:** {topic_text}\n\n{data.get('content', 'Контент отсутствует')}"
             try:
                 bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
                 print(f"✅ Топик опубликован: {file_name}")
             except TelegramError as e:
                 print(f"🚨 Ошибка отправки сообщения в Telegram: {e}")
         else:
-            print(f"⚠️ Файл {file_name} не содержит ключ 'topik'.")
+            print(f"⚠️ Файл {file_name} не содержит ключ 'topik' или 'topic'.")
 
         os.remove(local_path)  # Удаляем файл после обработки
     except Exception as e:
