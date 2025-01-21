@@ -57,13 +57,13 @@ for file_name in files_to_download:
     local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
 
     try:
-        # 🔹 Проверяем, существует ли файл в B2
-        file_info = bucket.get_file_info_by_name(file_name)
-        print(f"ℹ️ Файл найден в B2: {file_name} (размер: {file_info['contentLength']} байт)")
+        # 🔹 Получаем информацию о файле в B2
+        file_info = bucket.get_file_info_by_name(file_name).as_dict()
+        print(f"ℹ️ Файл найден в B2: {file_name} (размер: {file_info.get('contentLength', 'неизвестен')} байт)")
 
-        # 🔹 Скачивание файла
+        # 🔹 Скачиваем файл
         print(f"📥 Скачивание {file_name} в {local_path}...")
-        bucket.download_file_by_name(file_name, local_path)
+        bucket.download_file_by_name(file_name).save_to(local_path)
 
         # 🔹 Проверяем, скачался ли файл
         if os.path.exists(local_path):
