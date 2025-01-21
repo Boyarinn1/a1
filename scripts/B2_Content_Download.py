@@ -1,6 +1,7 @@
 import os
 import json
 import b2sdk.v2
+import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
 
@@ -32,56 +33,60 @@ b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 # 🔹 Получаем bucket
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
-# 🔹 Поиск JSON-файлов в папке 444/
-files_to_download = []
-print("📥 Поиск файлов в B2 (папка 444/)...")
-for file_version, _ in bucket.ls("444/", recursive=True):
-    if file_version.file_name.endswith(".json"):  # Ищем только JSON-файлы
-        files_to_download.append(file_version.file_name)
+async def process_files():
+    """Функция обработки и отправки JSON-файлов в Telegram"""
+    files_to_download = []
+    print("📥 Поиск файлов в B2 (папка 444/)...")
+    for file_version, _ in bucket.ls("444/", recursive=True):
+        if file_version.file_name.endswith(".json"):  # Ищем только JSON-файлы
+            files_to_download.append(file_version.file_name)
 
-if not files_to_download:
-    print("⚠️ Нет файлов для загрузки. Ожидание новых данных...")
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump({"status": "waiting", "files": []}, f, indent=4)
-    exit(0)
+    if not files_to_download:
+        print("⚠️ Нет файлов для загрузки. Ожидание новых данных...")
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"status": "waiting", "files": []}, f, indent=4)
+        return
 
-# 🔹 Создаём директорию для загрузки, если её нет
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    # 🔹 Создаём директорию для загрузки, если её нет
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# 🔹 Загружаем и обрабатываем файлы
-for file_name in files_to_download:
-    local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
-    try:
-        # Скачиваем файл
-        print(f"📥 Скачивание {file_name} в {local_path}...")
-        bucket.download_file_by_name(file_name).save_to(local_path)
-
-        # Обрабатываем JSON-файлы
-        with open(local_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        # 🔹 Проверяем наличие ключа 'topik' или 'topic'
-        topic_text = None
-        if "topik" in data:
-            topic_text = data["topik"]
-        elif "topic" in data and isinstance(data["topic"], dict) and "topic" in data["topic"]:
-            topic_text = data["topic"]["topic"]
-
-        # 🔹 Отправка сообщения в Telegram
-        if topic_text:
-            message = f"**Топик:** {topic_text}\n\n{data.get('content', 'Контент отсутствует')}"
-        else:
-            message = f"📜 JSON-файл без ключа 'topik' или 'topic':\n```\n{json.dumps(data, indent=4, ensure_ascii=False)}\n```"
-
+    for file_name in files_to_download:
+        local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
         try:
-            bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
-            print(f"✅ Сообщение отправлено: {file_name}")
-        except TelegramError as e:
-            print(f"🚨 Ошибка отправки в Telegram: {e}")
+            # Скачиваем файл
+            print(f"📥 Скачивание {file_name} в {local_path}...")
+            bucket.download_file_by_name(file_name).save_to(local_path)
 
-        os.remove(local_path)  # Удаляем файл после обработки
-    except Exception as e:
-        print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
+            # Обрабатываем JSON-файл
+            with open(local_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-# 🔹 Завершение работы
-print("🚀 Скрипт завершён.")
+            # 🔹 Проверяем наличие ключа 'topik' или 'topic'
+            topic_text = None
+            if "topik" in data:
+                topic_text = data["topik"]
+            elif "topic" in data and isinstance(data["topic"], dict) and "topic" in data["topic"]:
+                topic_text = data["topic"]["topic"]
+
+            # 🔹 Формируем сообщение для Telegram
+            if topic_text:
+                message = f"**Топик:** {topic_text}\n\n{data.get('content', 'Контент отсутствует')}"
+            else:
+                message = f"📜 JSON-файл без ключа 'topik' или 'topic':\n```\n{json.dumps(data, indent=4, ensure_ascii=False)}\n```"
+
+            # 🔹 Отправляем сообщение в Telegram
+            try:
+                await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
+                print(f"✅ Сообщение отправлено: {file_name}")
+            except TelegramError as e:
+                print(f"🚨 Ошибка отправки в Telegram: {e}")
+
+            os.remove(local_path)  # Удаляем файл после обработки
+        except Exception as e:
+            print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
+
+    print("🚀 Скрипт завершён.")
+
+# Запуск асинхронного кода
+if __name__ == "__main__":
+    asyncio.run(process_files())
