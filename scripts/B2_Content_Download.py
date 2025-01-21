@@ -61,18 +61,24 @@ async def process_files():
             with open(local_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # 🔹 Проверяем наличие ключа 'topik' или 'topic'
-            topic_text = None
-            if "topik" in data:
-                topic_text = data["topik"]
-            elif "topic" in data and isinstance(data["topic"], dict) and "topic" in data["topic"]:
-                topic_text = data["topic"]["topic"]
+            # 🔹 Извлекаем данные
+            topic = data.get("topic", {}).get("topic", "Без темы")
+            text_content = data.get("text_initial", {}).get("content", "Контент отсутствует.")
+            critique = data.get("critique", {}).get("critique", "")
+            sarcasm = data.get("sarcasm", {}).get("comment", "")
+            poll = data.get("sarcasm", {}).get("poll", "")
 
-            # 🔹 Формируем сообщение для Telegram
-            if topic_text:
-                message = f"**Топик:** {topic_text}\n\n{data.get('content', 'Контент отсутствует')}"
-            else:
-                message = f"📜 JSON-файл без ключа 'topik' или 'topic':\n```\n{json.dumps(data, indent=4, ensure_ascii=False)}\n```"
+            # 🔹 Формируем сообщение по шаблону
+            message = f"**{topic}**\n\n{text_content}"
+
+            if critique:
+                message += f"\n\n💡 **Критический разбор**\n{critique}"
+
+            if sarcasm:
+                message += f"\n\n📢 **Сарказм**\n{sarcasm}"
+
+            if poll:
+                message += f"\n\n📊 **Опрос**\n{poll}"
 
             # 🔹 Отправляем сообщение в Telegram
             try:
