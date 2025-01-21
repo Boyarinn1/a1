@@ -58,6 +58,9 @@ print("✅ Загрузка завершена. Загруженные файл�
 with open(CONFIG_PATH, "w", encoding="utf-8") as f:
     json.dump({"status": "ready", "files": downloaded_files}, f, indent=4)
 
+# 🔹 Проверяем, действительно ли файлы скачались
+print(f"📂 Проверяем содержимое {DOWNLOAD_DIR}: {os.listdir(DOWNLOAD_DIR)}")
+
 # 🔹 Если работаем в GitHub Actions, создаём артефакт
 if os.getenv("GITHUB_ACTIONS"):
     print("📂 Загружаем файлы как артефакт в GitHub Actions...")
@@ -68,6 +71,5 @@ if os.getenv("GITHUB_ACTIONS"):
     else:
         subprocess.run(["zip", "-r", "downloaded_files.zip", DOWNLOAD_DIR], check=True)
         print("⚠️ Используйте GitHub Actions для загрузки артефактов. Скрипт не может выполнить upload сам.")
-
 
 print("🚀 Скрипт завершён.")

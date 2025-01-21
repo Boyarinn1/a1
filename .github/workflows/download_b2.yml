@@ -24,9 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install b2sdk
 
-      - name: Debug Repository Structure
+      - name: Debug Проверка структуры репозитория
         run: |
-          echo "Current directory: $(pwd)"
+          echo "Текущая директория: $(pwd)"
           ls -R
         shell: bash
 
@@ -44,7 +44,7 @@ jobs:
 
       - name: Debug Проверка файлов в рабочем пространстве
         run: |
-          echo "Поиск всех файлов в контейнере:"
+          echo "🔍 Поиск всех файлов в контейнере:"
           find /home/runner/work/a1/a1/ -type f
         shell: bash
 
@@ -55,7 +55,7 @@ jobs:
 
       - name: Debug Проверка наличия скачанных файлов перед upload-artifact
         run: |
-          echo "Содержимое папки data/downloaded/"
+          echo "📂 Содержимое папки data/downloaded/"
           ls -lah data/downloaded/ || echo "❌ Папка пуста!"
         shell: bash
 
