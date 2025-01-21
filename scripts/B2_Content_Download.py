@@ -16,6 +16,15 @@ S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+# Вывод значений переменных окружения (кроме чувствительных)
+print(f"S3_KEY_ID: {bool(S3_KEY_ID)}")
+print(f"S3_APPLICATION_KEY: {bool(S3_APPLICATION_KEY)}")
+print(f"S3_BUCKET_NAME: {bool(S3_BUCKET_NAME)}")
+print(f"S3_ENDPOINT: {S3_ENDPOINT}")
+print(f"TELEGRAM_TOKEN: {bool(TELEGRAM_TOKEN)}")
+print(f"TELEGRAM_CHAT_ID: {bool(TELEGRAM_CHAT_ID)}")
+
+
 # 🔹 Проверка переменных
 if not all([S3_KEY_ID, S3_APPLICATION_KEY, S3_BUCKET_NAME, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
     raise RuntimeError("❌ Ошибка: Не установлены все необходимые переменные окружения!")
