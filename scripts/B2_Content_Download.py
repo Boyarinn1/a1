@@ -45,10 +45,9 @@ async def process_files():
 
     # 🔍 Отладка: получаем список файлов из B2
     print("📥 Запрашиваем актуальный список файлов в B2 (папка 444/)...")
-    files_to_download = [
-        file.file_name
-        for file in bucket.list_file_names("444/")
-    ]
+    files_to_download = []
+    for file_version, _ in bucket.ls("444/", recursive=True):
+        files_to_download.append(file_version.file_name)
 
     print(f"📌 Найдено файлов в B2: {len(files_to_download)}")
     for file_name in files_to_download:
