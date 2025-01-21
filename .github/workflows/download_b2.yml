@@ -42,9 +42,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python scripts/B2_Content_Download.py
 
+      - name: Debug Проверка файлов в рабочем пространстве
+        run: |
+          echo "Поиск всех файлов в контейнере:"
+          find /home/runner/work/a1/a1/ -type f
+        shell: bash
+
+      - name: Move downloaded files to correct directory
+        run: |
+          mv /home/runner/work/a1/a1/data/downloaded/* data/downloaded/ || echo "❌ Нет файлов для перемещения!"
+        shell: bash
+
       - name: Debug Проверка наличия скачанных файлов перед upload-artifact
         run: |
-          echo "Содержимое папки data/downloaded/:"
+          echo "Содержимое папки data/downloaded/"
           ls -lah data/downloaded/ || echo "❌ Папка пуста!"
         shell: bash
 
