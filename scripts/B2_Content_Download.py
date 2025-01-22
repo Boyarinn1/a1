@@ -3,9 +3,7 @@ import json
 import b2sdk.v2
 import asyncio
 import shutil
-from telegram import Bot
-from telegram.error import TelegramError
-from telegram.helpers import escape_markdown
+from telegram import Bot, TelegramError
 
 # 🔹 Определяем пути
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -20,34 +18,26 @@ S3_ENDPOINT = os.getenv("S3_ENDPOINT", "production")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# 🔹 Проверка переменных окружения
 if not all([S3_KEY_ID, S3_APPLICATION_KEY, S3_BUCKET_NAME, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     raise RuntimeError("❌ Ошибка: Не установлены все необходимые переменные окружения!")
 
-# 🔹 Telegram Bot
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# 🔹 Авторизация в B2
 info = b2sdk.v2.InMemoryAccountInfo()
 b2_api = b2sdk.v2.B2Api(info)
 b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 
-# 🔹 Получаем bucket
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
-async def process_files():
-    """Функция обработки и отправки JSON-файлов в Telegram"""
 
-    # 🔍 Очистка папки загрузки перед скачиванием
+async def process_files():
     print("🗑 Полная очистка локальной папки перед скачиванием...")
     shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    # 🔍 Загружаем файлы из B2 (папка 666/)
     print("\n📥 Запрашиваем список файлов в B2 (папка 666/)...")
     files_to_download = [file_version.file_name for file_version, _ in bucket.ls("666/", recursive=True)]
 
-    print(f"📌 Найдено файлов в B2: {len(files_to_download)}")
     if not files_to_download:
         print("⚠️ Нет новых файлов для загрузки.")
         return
@@ -55,7 +45,6 @@ async def process_files():
     for file_name in files_to_download:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
 
-        # Пропускаем не JSON-файлы
         if not file_name.endswith(".json"):
             print(f"⏭ Пропускаем файл {file_name} (не JSON)")
             continue
@@ -64,37 +53,40 @@ async def process_files():
             print(f"📥 Скачивание {file_name} в {local_path}...")
             bucket.download_file_by_name(file_name).save_to(local_path)
 
-            # Читаем JSON
             with open(local_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # 🔹 Формируем первый пост (основной текст)
             topic_clean = data.get("topic", {}).get("topic", "").strip('"')
-            text_content = data.get("text_initial", {}).get("content", "")
-            text_content = text_content.replace("Сгенерированный текст на тему:", "").strip()
-            formatted_text = escape_markdown(f"🏛 {topic_clean}\n\n{text_content}", version=2)
+            text_content = data.get("text_initial", {}).get("content", "").strip()
+            if not text_content:
+                print(f"⚠️ Пропуск пустого контента в {file_name}")
+                continue
 
-            # Отправляем первый пост
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="MarkdownV2")
+            formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{text_content}"
+            print(f"📤 Отправка сообщения: {formatted_text[:50]}...")
+            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
 
-            # 🔹 Формируем и отправляем интерактивный опрос
+            sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
+            if sarcasm_comment:
+                sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
+                print(f"📤 Отправка саркастического комментария: {sarcasm_text[:50]}...")
+                await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
+
             if "sarcasm" in data and "poll" in data["sarcasm"]:
-                question = data['sarcasm']['poll']['question']
-                options_clean = [opt.strip('"') for opt in data['sarcasm']['poll']['options']]
+                poll_data = data["sarcasm"].get("poll", {})
+                question = poll_data.get("question", "").strip()
+                options = [opt.strip('"') for opt in poll_data.get("options", []) if opt.strip()]
+                if question and options:
+                    print(f"📤 Отправка опроса: {question}")
+                    try:
+                        await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
+                                            is_anonymous=False)
+                    except TelegramError as e:
+                        print(f"🚨 Ошибка отправки опроса: {e}")
 
-                # Проверка прав бота на отправку опросов
-                try:
-                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options_clean, is_anonymous=False)
-                except TelegramError as e:
-                    print(f"🚨 Ошибка отправки опроса: {e}")
-
-            print(f"✅ Сообщение отправлено: {file_name}")
-
-            # 🔹 Перемещение файла в архив
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
             os.makedirs(processed_dir, exist_ok=True)
             shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
-
             print(f"🗑 Файл {file_name} перемещён в архив processed.")
 
         except Exception as e:
@@ -102,6 +94,6 @@ async def process_files():
 
     print("🚀 Скрипт завершён.")
 
-# Запуск асинхронного кода
+
 if __name__ == "__main__":
     asyncio.run(process_files())
