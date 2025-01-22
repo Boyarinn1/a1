@@ -54,7 +54,9 @@ async def process_files():
             bucket.download_file_by_name(file_name).save_to(local_path)
 
             with open(local_path, "r", encoding="utf-8") as f:
+                print(f"📂 Открыт JSON-файл: {local_path}")
                 data = json.load(f)
+            print("📊 JSON содержимое:", json.dumps(data, indent=2, ensure_ascii=False))
 
             topic_clean = data.get("topic", {}).get("topic", "").strip('"')
             text_content = data.get("text_initial", {}).get("content", "").strip()
@@ -62,9 +64,7 @@ async def process_files():
                 print(f"⚠️ Пропуск пустого контента в {file_name}")
                 continue
 
-            formatted_text = f"""🏛 <b>{topic_clean.strip()}</b>
-
-{text_content.strip()}"""
+            formatted_text = f"""🏛 <b>{topic_clean.strip()}</b>\n\n{text_content.strip()}"""
             print(f"📤 Отправка сообщения: {formatted_text[:50]}...")
             await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
             await asyncio.sleep(1)
@@ -86,9 +86,6 @@ async def process_files():
                         await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
                                             is_anonymous=False)
                         await asyncio.sleep(1)
-                    except Exception as e:
-                        print(f"🚨 Ошибка отправки опроса: {e}")
-                        print(f"🚨 Ошибка отправки опроса: {e}")
                     except Exception as e:
                         print(f"🚨 Ошибка отправки опроса: {e}")
 
