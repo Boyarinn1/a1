@@ -66,10 +66,4 @@ jobs:
           ls -lah data/downloaded/ || echo "❌ Папка пуста!"
         shell: bash
 
-      - name: Upload downloaded files as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: downloaded_files
-          path: data/downloaded/*
-          if-no-files-found: error
-          compression-level: 0
+     
