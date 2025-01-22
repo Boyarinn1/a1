@@ -107,17 +107,23 @@ async def process_files():
             sarcasm = data.get("sarcasm", {}).get("comment", "")
             poll = data.get("sarcasm", {}).get("poll", "")
 
-            # 🔹 Формируем сообщение по шаблону
-            message = f"🏛 **{data['topic']['topic']}**\n\n"
-            message += f"{data['text_initial']['content']}\n\n"
+            # 🔹 Формируем первый пост (основной текст)
+            message = f"🏛 **{data['topic']['topic'].strip('\"')}**\n\n"
+            message += f"{data['text_initial']['content'].split('Сгенерированный текст на тему: ')[-1]}\n\n"
 
-            # Добавляем интерактивный опрос
-            if "sarcasm" in data:
-                message += f"📜 _{data['sarcasm'].get('comment', '')}_\n\n"
+            # Отправляем основной пост в Telegram
+            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
 
-            if "poll" in data.get("sarcasm", {}):
-                message += "\n\n"  # Две пустые строки перед вопросом
-                message += f"🎭 **{data['sarcasm']['poll']['question']}**\n"
+            # 🔹 Формируем второй пост (опрос)
+            if "sarcasm" in data and "poll" in data["sarcasm"]:
+                poll_message = f"📜 _{data['sarcasm']['comment']}_\n\n\n"
+                poll_message += f"🎭 **{data['sarcasm']['poll']['question']}**\n"
+
+                for option in data['sarcasm']['poll']['options']:
+                    poll_message += f"🔹 {option.strip('\"')}\n"
+
+                # Отправляем опрос в Telegram
+                await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=poll_message, parse_mode="Markdown")
 
             if critique:
                 message += f"\n\n💡 **Критический разбор**\n{critique}"
