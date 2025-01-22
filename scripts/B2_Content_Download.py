@@ -56,10 +56,12 @@ async def process_files():
             with open(local_path, "r", encoding="utf-8") as f:
                 print(f"📂 Открыт JSON-файл: {local_path}")
                 data = json.load(f)
-            print("📊 JSON содержимое:", json.dumps(data, indent=2, ensure_ascii=False))
+                print("📊 Полное содержимое JSON:", json.dumps(data, indent=2, ensure_ascii=False))
 
             topic_clean = data.get("topic", {}).get("topic", "").strip('"')
+            print("📝 Извлечённый заголовок:", topic_clean)
             text_content = data.get("text_initial", {}).get("content", "").strip()
+            print("📜 Извлечённый текст:", text_content[:100], "...")
             if not text_content:
                 print(f"⚠️ Пропуск пустого контента в {file_name}")
                 continue
@@ -70,6 +72,7 @@ async def process_files():
             await asyncio.sleep(1)
 
             sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
+            print("🎭 Извлечённый саркастический комментарий:", sarcasm_comment)
             if sarcasm_comment:
                 sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
                 print(f"📤 Отправка саркастического комментария: {sarcasm_text[:50]}...")
@@ -78,6 +81,7 @@ async def process_files():
 
             if "sarcasm" in data and "poll" in data["sarcasm"]:
                 poll_data = data["sarcasm"].get("poll", {})
+                print("📊 Извлечённые данные опроса:", poll_data)
                 question = poll_data.get("question", "").strip()
                 options = [opt.strip('"') for opt in poll_data.get("options", []) if opt.strip()]
                 if question and options:
