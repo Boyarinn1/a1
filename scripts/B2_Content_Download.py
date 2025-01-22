@@ -77,15 +77,13 @@ async def process_files():
             # Отправляем первый пост
             await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
 
-            # 🔹 Формируем второй пост (опрос)
+            # 🔹 Формируем и отправляем интерактивный опрос
             if "sarcasm" in data and "poll" in data["sarcasm"]:
-                poll_message = f"📜 _{data['sarcasm']['comment']}_\n\n"
-                poll_message += f"🎭 **{data['sarcasm']['poll']['question']}**\n\n"
-                options_clean = [opt.replace('"', '').strip() for opt in data['sarcasm']['poll']['options']]
-                poll_message += "\n".join([f"🔹 {opt}" for opt in options_clean])
+                question = data['sarcasm']['poll']['question']
+                options = [opt.replace('"', '').strip() for opt in data['sarcasm']['poll']['options']]
 
                 # Отправляем опрос
-                await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=poll_message, parse_mode="Markdown")
+                await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options, is_anonymous=False)
 
             print(f"✅ Сообщение отправлено: {file_name}")
 
