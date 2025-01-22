@@ -3,8 +3,6 @@ import json
 import b2sdk.v2
 import asyncio
 import shutil
-
-
 from telegram import Bot
 from telegram.error import TelegramError
 
@@ -138,8 +136,6 @@ async def process_files():
                 print(f"🚨 Ошибка отправки в Telegram: {e}")
 
             # 🔍 Отладка: удаляем файл после обработки
-            import shutil
-
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
             os.makedirs(processed_dir, exist_ok=True)  # Создаём папку, если её нет
 
