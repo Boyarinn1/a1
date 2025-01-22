@@ -110,7 +110,16 @@ async def process_files():
             poll = data.get("sarcasm", {}).get("poll", "")
 
             # 🔹 Формируем сообщение по шаблону
-            message = f"📜 **Полное содержимое JSON:**\n```\n{json.dumps(data, indent=4, ensure_ascii=False)}\n```"
+            message = f"🏛 **{data['topic']['topic']}**\n\n"
+            message += f"{data['text_initial']['content']}\n\n"
+
+            # Добавляем интерактивный опрос
+            if "sarcasm" in data:
+                message += f"📜 _{data['sarcasm'].get('comment', '')}_\n\n"
+
+            if "poll" in data.get("sarcasm", {}):
+                message += "\n\n"  # Две пустые строки перед вопросом
+                message += f"🎭 **{data['sarcasm']['poll']['question']}**\n"
 
             if critique:
                 message += f"\n\n💡 **Критический разбор**\n{critique}"
