@@ -3,7 +3,7 @@ import json
 import b2sdk.v2
 import asyncio
 import shutil
-from telegram import Bot, TelegramError
+from telegram import Bot
 
 # 🔹 Определяем пути
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -81,7 +81,7 @@ async def process_files():
                     try:
                         await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
                                             is_anonymous=False)
-                    except TelegramError as e:
+                    except Exception as e:
                         print(f"🚨 Ошибка отправки опроса: {e}")
 
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
