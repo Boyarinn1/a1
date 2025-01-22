@@ -62,38 +62,47 @@ async def process_files():
                 print(f"⚠️ Пропуск пустого контента в {file_name}")
                 continue
 
-            formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{text_content}"
-            print(f"📤 Отправка сообщения: {formatted_text[:50]}...")
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
+            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>
 
-            sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
-            if sarcasm_comment:
-                sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
-                print(f"📤 Отправка саркастического комментария: {sarcasm_text[:50]}...")
-                await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
 
-            if "sarcasm" in data and "poll" in data["sarcasm"]:
-                poll_data = data["sarcasm"].get("poll", {})
-                question = poll_data.get("question", "").strip()
-                options = [opt.strip('"') for opt in poll_data.get("options", []) if opt.strip()]
-                if question and options:
-                    print(f"📤 Отправка опроса: {question}")
-                    try:
-                        await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
-                                            is_anonymous=False)
-                    except Exception as e:
-                        print(f"🚨 Ошибка отправки опроса: {e}")
+{text_content.strip()}
+"
+print(f"📤 Отправка сообщения: {formatted_text[:50]}...")
+await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
+await asyncio.sleep(1)
 
-            processed_dir = os.path.join(BASE_DIR, "data", "processed")
-            os.makedirs(processed_dir, exist_ok=True)
-            shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
-            print(f"🗑 Файл {file_name} перемещён в архив processed.")
+sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
+if sarcasm_comment:
+    sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
+    print(f"📤 Отправка саркастического комментария: {sarcasm_text[:50]}...")
+    await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
+    await asyncio.sleep(1)
+    await asyncio.sleep(1)
 
+if "sarcasm" in data and "poll" in data["sarcasm"]:
+    poll_data = data["sarcasm"].get("poll", {})
+    question = poll_data.get("question", "").strip()
+    options = [opt.strip('"') for opt in poll_data.get("options", []) if opt.strip()]
+    if question and options:
+        print(f"📤 Отправка опроса: {question}")
+        try:
+            await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options, is_anonymous=False)
+            await asyncio.sleep(1)
         except Exception as e:
-            print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
+            print(f"🚨 Ошибка отправки опроса: {e}")
+            print(f"🚨 Ошибка отправки опроса: {e}")
+        except Exception as e:
+            print(f"🚨 Ошибка отправки опроса: {e}")
 
-    print("🚀 Скрипт завершён.")
+processed_dir = os.path.join(BASE_DIR, "data", "processed")
+os.makedirs(processed_dir, exist_ok=True)
+shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
+print(f"🗑 Файл {file_name} перемещён в архив processed.")
 
+except Exception as e:
+print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
+
+print("🚀 Скрипт завершён.")
 
 if __name__ == "__main__":
     asyncio.run(process_files())
