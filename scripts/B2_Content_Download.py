@@ -122,7 +122,8 @@ async def process_files():
                 poll_message += f"🎭 **{data['sarcasm']['poll']['question']}**\n"
 
                 for option in data['sarcasm']['poll']['options']:
-                    poll_message += f"🔹 {option.strip('\"')}\n"
+                    option_clean = option.replace('"', '')  # Удаляем кавычки заранее
+                    poll_message += f"🔹 {option_clean}\n"
 
                 # Отправляем опрос в Telegram
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=poll_message, parse_mode="Markdown")
