@@ -3,6 +3,8 @@ import json
 import b2sdk.v2
 import asyncio
 import shutil
+
+
 from telegram import Bot
 from telegram.error import TelegramError
 
@@ -127,8 +129,18 @@ async def process_files():
                 print(f"🚨 Ошибка отправки в Telegram: {e}")
 
             # 🔍 Отладка: удаляем файл после обработки
+            import shutil
+
+            processed_dir = os.path.join(BASE_DIR, "data", "processed")
+            os.makedirs(processed_dir, exist_ok=True)  # Создаём папку, если её нет
+
+            # Копируем файл перед удалением
+            shutil.copy(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
+
+            # Теперь можно удалить оригинал
             os.remove(local_path)
-            print(f"🗑 Файл {file_name} удалён после обработки.")
+            print(f"🗑 Файл {file_name} перемещён в архив processed и удалён из data/downloaded.")
+
 
         except Exception as e:
             print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
