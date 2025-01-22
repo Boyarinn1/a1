@@ -5,6 +5,7 @@ import asyncio
 import shutil
 from telegram import Bot
 from telegram.error import TelegramError
+from telegram.helpers import escape_markdown
 
 # 🔹 Определяем пути
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -71,19 +72,21 @@ async def process_files():
             topic_clean = data.get("topic", {}).get("topic", "").strip('"')
             text_content = data.get("text_initial", {}).get("content", "")
             text_content = text_content.replace("Сгенерированный текст на тему:", "").strip()
-
-            message = f"🏛 **{topic_clean}**\n\n{text_content}"
+            formatted_text = escape_markdown(f"🏛 {topic_clean}\n\n{text_content}", version=2)
 
             # Отправляем первый пост
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
+            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="MarkdownV2")
 
             # 🔹 Формируем и отправляем интерактивный опрос
             if "sarcasm" in data and "poll" in data["sarcasm"]:
                 question = data['sarcasm']['poll']['question']
-                options = [opt.replace('"', '').strip() for opt in data['sarcasm']['poll']['options']]
+                options_clean = [opt.strip('"') for opt in data['sarcasm']['poll']['options']]
 
-                # Отправляем опрос
-                await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options, is_anonymous=False)
+                # Проверка прав бота на отправку опросов
+                try:
+                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options_clean, is_anonymous=False)
+                except TelegramError as e:
+                    print(f"🚨 Ошибка отправки опроса: {e}")
 
             print(f"✅ Сообщение отправлено: {file_name}")
 
