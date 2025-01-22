@@ -108,7 +108,7 @@ async def process_files():
             poll = data.get("sarcasm", {}).get("poll", "")
 
             # 🔹 Формируем первый пост (основной текст)
-            message = f"🏛 **{data['topic']['topic'].strip('\"')}**\n\n"
+            message = f"🏛 **{data['topic']['topic'].replace('\"', '')}**\n\n"
             message += f"{data['text_initial']['content'].split('Сгенерированный текст на тему: ')[-1]}\n\n"
 
             # Отправляем основной пост в Telegram
