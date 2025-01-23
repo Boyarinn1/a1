@@ -83,8 +83,9 @@ async def process_files():
                 poll_data = data["sarcasm"].get("poll", {})
                 print("📊 Извлечённые данные опроса:", poll_data)
                 question = poll_data.get("question", "").strip()
-                options = [opt.strip('"') for opt in poll_data.get("options", []) if opt.strip()]
-                if question and options:
+                options = poll_data.get("options", [])  # ❌ УБРАЛ .strip('"'), т.к. options уже массив
+
+                if question and len(options) >= 2:  # ✅ ДОБАВЛЕНА ПРОВЕРКА НА МИНИМАЛЬНОЕ КОЛ-ВО ОТВЕТОВ
                     print(f"📤 Отправка опроса: {question}")
                     try:
                         await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
