@@ -58,6 +58,18 @@ async def process_files():
                 data = json.load(f)
                 print("📊 Полное содержимое JSON:", json.dumps(data, indent=2, ensure_ascii=False))
 
+            # 🔍 Логируем данные перед обработкой
+            print(f"📊 Загруженные данные: {json.dumps(data, indent=2, ensure_ascii=False)}")
+
+            # ✅ Принудительно конвертируем poll в объект, если он строка
+            if "sarcasm" in data and "poll" in data["sarcasm"] and isinstance(data["sarcasm"]["poll"], str):
+                try:
+                    data["sarcasm"]["poll"] = json.loads(data["sarcasm"]["poll"])
+                    print(f"✅ Poll исправлен: {data['sarcasm']['poll']}")
+                except json.JSONDecodeError:
+                    print("🚨 Ошибка парсинга poll! Оставляем пустым объектом.")
+                    data["sarcasm"]["poll"] = {}
+
             topic_clean = data.get("topic", {}).get("topic", "").strip("'\"")
             print("📝 Извлечённый заголовок:", topic_clean)
             text_content = data.get("text_initial", {}).get("content", "").strip()
