@@ -34,8 +34,8 @@ async def process_files():
     shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    print("\n📥 Запрашиваем список файлов в B2 (папка 666/)...")
-    files_to_download = [file_version.file_name for file_version, _ in bucket.ls("666/", recursive=True)]
+    print("\n📥 Запрашиваем список файлов в B2 (папка 444/)...")
+    files_to_download = [file_version.file_name for file_version, _ in bucket.ls("444/", recursive=True)]
 
     if not files_to_download:
         print("⚠️ Нет новых файлов для загрузки.")
