@@ -8,7 +8,6 @@ from telegram import Bot
 # 🔹 Определяем пути
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
-CONFIG_PATH = os.path.join(BASE_DIR, "config", "config_public.json")
 
 # 🔹 Загружаем переменные окружения
 S3_KEY_ID = os.getenv("S3_KEY_ID")
@@ -104,9 +103,14 @@ async def process_files():
                 question = poll_data.get("question", "").strip()
                 options = poll_data.get("options", [])
 
+                # ✅ Гарантируем, что options – это список
+                if not isinstance(options, list):
+                    print("🚨 Ошибка: options не является списком!")
+                    options = []
+
                 print(f"📊 Готовый к отправке опрос: {question} | Варианты: {options}")  # 🔍 Лог перед отправкой
 
-                if question and isinstance(options, list) and len(options) >= 2:
+                if question and options and len(options) >= 2:
                     print(f"📤 Отправка опроса: {question}")
                     await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
                                         is_anonymous=False)
