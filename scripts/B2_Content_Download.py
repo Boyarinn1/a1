@@ -75,19 +75,19 @@ async def process_files():
                 continue
 
             # 📜 Отправка заголовка и основного текста
-            # Убираем ненужные заголовки
+
             clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', '').strip()
             clean_text = clean_text.replace("Вступление:", "").replace("Основная часть:", "").replace(
                 "Интересный факт:", "").replace("Заключение:", "").strip()
 
             # Форматируем заголовок и добавляем отступ перед текстом
-            # Убираем ненужные заголовки
+
             clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', '').strip()
             clean_text = clean_text.replace("Вступление:", "").replace("Основная часть:", "").replace(
                 "Интересный факт:", "").replace("Заключение:", "").strip()
 
             # Оставляем только одну пустую строку между абзацами
-            clean_text = "\n".join(line.strip() for line in clean_text.split("\n") if line.strip())
+            clean_text = "\n\n".join(line.strip() for line in clean_text.split("\n") if line.strip())
 
             # Убираем дублирующийся сарказм и вопрос из первого сообщения
             if "🔶 Саркастический комментарий:" in clean_text:
@@ -131,10 +131,11 @@ async def process_files():
                 print(f"📊 Готовый к отправке опрос: {question} | Варианты: {options}")  # 🔍 Лог перед отправкой
 
                 if question and options and len(options) >= 2:
-                    print(f"📊 Перед отправкой опроса в Telegram: {poll_data} (тип: {type(poll_data)})")
-                    print(f"📤 Отправка опроса: {question}")
-                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
+                    print(f"📊 Готовый к отправке опрос: {question} | Варианты: {options}")  # Лог
+                    poll_text = f"🎭 {question}"  # Добавляем эмодзи 🎭
+                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=poll_text, options=options,
                                         is_anonymous=True)
+
                     await asyncio.sleep(1)
 
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
