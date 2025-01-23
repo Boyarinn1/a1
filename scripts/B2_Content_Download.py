@@ -72,6 +72,7 @@ async def process_files():
             await asyncio.sleep(1)
 
             # 🎭 Отправка саркастического комментария курсивом
+            sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
             if sarcasm_comment:
                 sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
@@ -80,10 +81,19 @@ async def process_files():
             # 📊 Отправка интерактивного опроса
             if "sarcasm" in data and "poll" in data["sarcasm"]:
                 poll_data = data["sarcasm"].get("poll", {})
+
+                if isinstance(poll_data, str):  # ✅ Проверяем, если poll передан как строка JSON
+                    try:
+                        poll_data = json.loads(poll_data)  # 🔄 Преобразуем строку JSON в объект
+                    except json.JSONDecodeError:
+                        print("🚨 Ошибка: Опрос в некорректном формате!")
+                        poll_data = {}
+
                 question = poll_data.get("question", "").strip()
                 options = poll_data.get("options", [])
 
-                if question and len(options) >= 2:
+                if question and isinstance(options, list) and len(options) >= 2:
+                    print(f"📤 Отправка опроса: {question}")
                     await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
                                         is_anonymous=False)
                     await asyncio.sleep(1)
