@@ -58,7 +58,7 @@ async def process_files():
                 data = json.load(f)
                 print("📊 Полное содержимое JSON:", json.dumps(data, indent=2, ensure_ascii=False))
 
-            topic_clean = data.get("topic", {}).get("topic", "").strip('"')
+            topic_clean = data.get("topic", {}).get("topic", "").strip("'\"")
             print("📝 Извлечённый заголовок:", topic_clean)
             text_content = data.get("text_initial", {}).get("content", "").strip()
             print("📜 Извлечённый текст:", text_content[:100], "...")
