@@ -82,10 +82,12 @@ async def process_files():
             if "sarcasm" in data and "poll" in data["sarcasm"]:
                 poll_data = data["sarcasm"].get("poll", {})
 
-                # ✅ Если poll_data строка, превращаем в объект
-                if isinstance(poll_data, str):
+                print(f"📊 Перед обработкой poll_data: {poll_data} (тип: {type(poll_data)})")  # 🔍 Логируем
+
+                if isinstance(poll_data, str):  # ✅ Если poll_data строка, превращаем в объект
                     try:
                         poll_data = json.loads(poll_data)
+                        print(f"✅ Poll успешно распаршен: {poll_data}")  # 🔍 Лог успеха
                     except json.JSONDecodeError:
                         print("🚨 Ошибка: Опрос в некорректном формате!")
                         poll_data = {}
@@ -93,21 +95,7 @@ async def process_files():
                 question = poll_data.get("question", "").strip()
                 options = poll_data.get("options", [])
 
-                if question and isinstance(options, list) and len(options) >= 2:
-                    print(f"📤 Отправка опроса: {question}")
-                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
-                                        is_anonymous=False)
-                    await asyncio.sleep(1)
-
-                if isinstance(poll_data, str):  # ✅ Проверяем, если poll передан как строка JSON
-                    try:
-                        poll_data = json.loads(poll_data)  # 🔄 Преобразуем строку JSON в объект
-                    except json.JSONDecodeError:
-                        print("🚨 Ошибка: Опрос в некорректном формате!")
-                        poll_data = {}
-
-                question = poll_data.get("question", "").strip()
-                options = poll_data.get("options", [])
+                print(f"📊 Готовый к отправке опрос: {question} | Варианты: {options}")  # 🔍 Лог перед отправкой
 
                 if question and isinstance(options, list) and len(options) >= 2:
                     print(f"📤 Отправка опроса: {question}")
