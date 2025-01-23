@@ -75,7 +75,14 @@ async def process_files():
                 continue
 
             # 📜 Отправка заголовка и основного текста
-            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{text_content.strip()}"
+            # Убираем ненужные заголовки
+            clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', '').strip()
+            clean_text = clean_text.replace("Вступление:", "").replace("Основная часть:", "").replace(
+                "Интересный факт:", "").replace("Заключение:", "").strip()
+
+            # Форматируем заголовок и добавляем отступ перед текстом
+            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{clean_text}"
+
             await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
             await asyncio.sleep(1)
 
