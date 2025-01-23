@@ -29,16 +29,72 @@ b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
 
+def get_publish_status():
+    """Скачивает config_public.json из B2 и возвращает список опубликованных папок."""
+    try:
+        local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
+        bucket.download_file_by_name("config/config_public.json").save_to(local_config_path)
+
+        with open(local_config_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+
+        return set(config_data.get("publish", "").split(", "))  # Возвращаем список опубликованных папок
+    except Exception as e:
+        print(f"🚨 Ошибка при загрузке config_public.json: {e}")
+        return set()
+
+
+def update_publish_status(new_status):
+    """Добавляет новую папку в 'publish' в config_public.json, не удаляя старые данные."""
+    try:
+        local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
+
+        # 📥 Загружаем существующий config_public.json
+        if os.path.exists(local_config_path):
+            with open(local_config_path, "r", encoding="utf-8") as f:
+                config_data = json.load(f)
+        else:
+            config_data = {}
+
+        # 🏷 Добавляем новую папку в publish
+        existing_status = set(config_data.get("publish", "").split(", ")) if "publish" in config_data else set()
+        existing_status.add(new_status)
+        config_data["publish"] = ", ".join(existing_status)  # Сохраняем список
+
+        # 📤 Загружаем обратно в B2
+        with open(local_config_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, ensure_ascii=False, indent=4)
+
+        bucket.upload_local_file(local_config_path, "config/config_public.json")
+        print(f"✅ Обновлён config_public.json: {config_data['publish']}")
+    except Exception as e:
+        print(f"🚨 Ошибка при обновлении config_public.json: {e}")
+
+
 async def process_files():
     print("🗑 Полная очистка локальной папки перед скачиванием...")
     shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    print("\n📥 Запрашиваем список файлов в B2 (папка 444/)...")
-    files_to_download = [file_version.file_name for file_version, _ in bucket.ls("444/", recursive=True)]
+    print("\n📥 Проверяем статус публикации в config_public.json...")
+    published_folders = get_publish_status()
+
+    # Определяем, из какой папки публиковать
+    if "444/" not in published_folders:
+        publish_folder = "444/"
+    elif "555/" not in published_folders:
+        publish_folder = "555/"
+    elif "666/" not in published_folders:
+        publish_folder = "666/"
+    else:
+        print("🚀 Все папки опубликованы, останавливаем работу.")
+        return
+
+    print(f"📥 Запрашиваем список файлов в B2 (папка {publish_folder})...")
+    files_to_download = [file_version.file_name for file_version, _ in bucket.ls(publish_folder, recursive=True)]
 
     if not files_to_download:
-        print("⚠️ Нет новых файлов для загрузки.")
+        print(f"⚠️ Нет новых файлов для загрузки из {publish_folder}")
         return
 
     for file_name in files_to_download:
@@ -54,94 +110,39 @@ async def process_files():
 
             with open(local_path, "r", encoding="utf-8") as f:
                 raw_content = f.read()
-                print(f"📂 Содержимое перед разбором JSON:\n{raw_content}")  # 🔍 Лог до парсинга
-                data = json.loads(raw_content)  # ✅ Парсим JSON
-
-            # ✅ Принудительно конвертируем poll в объект, если он строка
-            if "sarcasm" in data and "poll" in data["sarcasm"] and isinstance(data["sarcasm"]["poll"], str):
-                try:
-                    data["sarcasm"]["poll"] = json.loads(data["sarcasm"]["poll"])
-                    print(f"✅ Poll исправлен: {data['sarcasm']['poll']}")
-                except json.JSONDecodeError:
-                    print("🚨 Ошибка парсинга poll! Оставляем пустым объектом.")
-                    data["sarcasm"]["poll"] = {}
+                print(f"📂 Содержимое перед разбором JSON:\n{raw_content}")
+                data = json.loads(raw_content)
 
             topic_clean = data.get("topic", {}).get("topic", "").strip("'\"")
-            print("📝 Извлечённый заголовок:", topic_clean)
             text_content = data.get("text_initial", {}).get("content", "").strip()
-            print("📜 Извлечённый текст:", text_content[:100], "...")
-            if not text_content:
-                print(f"⚠️ Пропуск пустого контента в {file_name}")
-                continue
+            text_content = "\n\n".join(line.strip() for line in text_content.split("\n") if line.strip())
 
-            # 📜 Отправка заголовка и основного текста
-
-            clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', '').strip()
-            clean_text = clean_text.replace("Вступление:", "").replace("Основная часть:", "").replace(
-                "Интересный факт:", "").replace("Заключение:", "").strip()
-
-            # Форматируем заголовок и добавляем отступ перед текстом
-
-            clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', '').strip()
-            clean_text = clean_text.replace("Вступление:", "").replace("Основная часть:", "").replace(
-                "Интересный факт:", "").replace("Заключение:", "").strip()
-
-            # Оставляем только одну пустую строку между абзацами
-            clean_text = "\n\n".join(line.strip() for line in clean_text.split("\n") if line.strip())
-
-            # Убираем дублирующийся сарказм и вопрос из первого сообщения
-            if "🔶 Саркастический комментарий:" in clean_text:
-                clean_text = clean_text.split("🔶 Саркастический комментарий:")[0].strip()
-
-            # Форматируем заголовок и текст
-            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{clean_text}"
-
+            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{text_content}"
             await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
             await asyncio.sleep(1)
 
-            # 🎭 Отправка саркастического комментария курсивом
             sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
             if sarcasm_comment:
                 sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
                 await asyncio.sleep(1)
 
-            # 📊 Отправка интерактивного опроса
             if "sarcasm" in data and "poll" in data["sarcasm"]:
-                poll_data = data["sarcasm"].get("poll", {})
-
-                print(f"📊 Перед обработкой poll_data: {poll_data} (тип: {type(poll_data)})")  # 🔍 Логируем
-
-                if isinstance(poll_data, str):  # ✅ Если poll_data строка, превращаем в объект
-                    try:
-                        poll_data = json.loads(poll_data)
-                        print(f"✅ Poll успешно распаршен: {poll_data}")  # 🔍 Лог успеха
-                    except json.JSONDecodeError:
-                        print("🚨 Ошибка: Опрос в некорректном формате!")
-                        poll_data = {}
-
+                poll_data = data["sarcasm"]["poll"]
                 question = poll_data.get("question", "").strip()
                 options = poll_data.get("options", [])
 
-                # ✅ Гарантируем, что options – это список
-                if not isinstance(options, list):
-                    print("🚨 Ошибка: options не является списком!")
-                    options = []
-
-                print(f"📊 Готовый к отправке опрос: {question} | Варианты: {options}")  # 🔍 Лог перед отправкой
-
                 if question and options and len(options) >= 2:
-                    print(f"📊 Готовый к отправке опрос: {question} | Варианты: {options}")  # Лог
-                    poll_text = f"🎭 {question}"  # Добавляем эмодзи 🎭
-                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=poll_text, options=options,
+                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=f"🎭 {question}", options=options,
                                         is_anonymous=True)
-
                     await asyncio.sleep(1)
 
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
             os.makedirs(processed_dir, exist_ok=True)
             shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
             print(f"🗑 Файл {file_name} перемещён в архив processed.")
+
+            update_publish_status(publish_folder)  # Обновляем статус публикации
 
         except Exception as e:
             print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
