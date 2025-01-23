@@ -114,7 +114,7 @@ async def process_files():
                     print(f"📊 Перед отправкой опроса в Telegram: {poll_data} (тип: {type(poll_data)})")
                     print(f"📤 Отправка опроса: {question}")
                     await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
-                                        is_anonymous=False)
+                                        is_anonymous=True)
                     await asyncio.sleep(1)
 
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
