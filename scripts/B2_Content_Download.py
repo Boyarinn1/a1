@@ -54,12 +54,9 @@ async def process_files():
             bucket.download_file_by_name(file_name).save_to(local_path)
 
             with open(local_path, "r", encoding="utf-8") as f:
-                print(f"📂 Открыт JSON-файл: {local_path}")
-                data = json.load(f)
-                print("📊 Полное содержимое JSON:", json.dumps(data, indent=2, ensure_ascii=False))
-
-            # 🔍 Логируем данные перед обработкой
-            print(f"📊 Загруженные данные: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                raw_content = f.read()
+                print(f"📂 Содержимое перед разбором JSON:\n{raw_content}")  # 🔍 Лог до парсинга
+                data = json.loads(raw_content)  # ✅ Парсим JSON
 
             # ✅ Принудительно конвертируем poll в объект, если он строка
             if "sarcasm" in data and "poll" in data["sarcasm"] and isinstance(data["sarcasm"]["poll"], str):
