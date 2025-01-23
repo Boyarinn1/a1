@@ -66,33 +66,27 @@ async def process_files():
                 print(f"⚠️ Пропуск пустого контента в {file_name}")
                 continue
 
-            formatted_text = f"""🏛 <b>{topic_clean.strip()}</b>\n\n{text_content.strip()}"""
-            print(f"📤 Отправка сообщения: {formatted_text[:50]}...")
+            # 📜 Отправка заголовка и основного текста
+            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{text_content.strip()}"
             await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
             await asyncio.sleep(1)
 
-            sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
-            print("🎭 Извлечённый саркастический комментарий:", sarcasm_comment)
+            # 🎭 Отправка саркастического комментария курсивом
             if sarcasm_comment:
                 sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
-                print(f"📤 Отправка саркастического комментария: {sarcasm_text[:50]}...")
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
                 await asyncio.sleep(1)
 
+            # 📊 Отправка интерактивного опроса
             if "sarcasm" in data and "poll" in data["sarcasm"]:
                 poll_data = data["sarcasm"].get("poll", {})
-                print("📊 Извлечённые данные опроса:", poll_data)
                 question = poll_data.get("question", "").strip()
-                options = poll_data.get("options", [])  # ❌ УБРАЛ .strip('"'), т.к. options уже массив
+                options = poll_data.get("options", [])
 
-                if question and len(options) >= 2:  # ✅ ДОБАВЛЕНА ПРОВЕРКА НА МИНИМАЛЬНОЕ КОЛ-ВО ОТВЕТОВ
-                    print(f"📤 Отправка опроса: {question}")
-                    try:
-                        await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
-                                            is_anonymous=False)
-                        await asyncio.sleep(1)
-                    except Exception as e:
-                        print(f"🚨 Ошибка отправки опроса: {e}")
+                if question and len(options) >= 2:
+                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=question, options=options,
+                                        is_anonymous=False)
+                    await asyncio.sleep(1)
 
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
             os.makedirs(processed_dir, exist_ok=True)
