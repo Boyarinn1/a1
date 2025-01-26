@@ -117,6 +117,10 @@ async def process_files():
             text_content = data.get("text_initial", {}).get("content", "").strip()
             text_content = "\n\n".join(line.strip() for line in text_content.split("\n") if line.strip())
 
+            # ❌ Убираем сарказм и вопрос из основного текста
+            if "🔶 Саркастический комментарий:" in text_content:
+                text_content = text_content.split("🔶 Саркастический комментарий:")[0].strip()
+
             formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{text_content}"
             await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
             await asyncio.sleep(1)
