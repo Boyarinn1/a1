@@ -109,19 +109,23 @@ async def process_files():
             bucket.download_file_by_name(file_name).save_to(local_path)
 
             with open(local_path, "r", encoding="utf-8") as f:
-                raw_content = f.read()
-                print(f"📂 Содержимое перед разбором JSON:\n{raw_content}")
-                data = json.loads(raw_content)
+                data = json.load(f)
 
             topic_clean = data.get("topic", {}).get("topic", "").strip("'\"")
             text_content = data.get("text_initial", {}).get("content", "").strip()
-            text_content = "\n\n".join(line.strip() for line in text_content.split("\n") if line.strip())
 
-            # ❌ Убираем сарказм и вопрос из основного текста
-            if "🔶 Саркастический комментарий:" in text_content:
-                text_content = text_content.split("🔶 Саркастический комментарий:")[0].strip()
+            # 🛑 Убираем лишние заголовки
+            clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', '').strip()
+            clean_text = clean_text.replace("Интересный факт:", "").strip()
 
-            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{text_content}"
+            # 🛑 Убираем сарказм и опрос из первого сообщения
+            if "🔶 Саркастический комментарий:" in clean_text:
+                clean_text = clean_text.split("🔶 Саркастический комментарий:")[0].strip()
+
+            if "🔸 Саркастический вопрос:" in clean_text:
+                clean_text = clean_text.split("🔸 Саркастический вопрос:")[0].strip()
+
+            formatted_text = f"🏛 <b>{topic_clean.strip()}</b>\n\n{clean_text}"
             await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
             await asyncio.sleep(1)
 
@@ -141,12 +145,7 @@ async def process_files():
                                         is_anonymous=True)
                     await asyncio.sleep(1)
 
-            processed_dir = os.path.join(BASE_DIR, "data", "processed")
-            os.makedirs(processed_dir, exist_ok=True)
-            shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
-            print(f"🗑 Файл {file_name} перемещён в архив processed.")
-
-            update_publish_status(publish_folder)  # Обновляем статус публикации
+            update_publish_status(publish_folder)
 
         except Exception as e:
             print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
