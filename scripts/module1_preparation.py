@@ -1,90 +1,155 @@
 import os
 import json
-import subprocess
-from b2sdk.v2 import B2Api, InMemoryAccountInfo
+import b2sdk.v2
+import asyncio
+import shutil
+from telegram import Bot
 
-# 🔄 Авторизация в B2
-info = InMemoryAccountInfo()
-b2_api = B2Api(info)
+# 🔹 Определяем пути
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
 
+# 🔹 Загружаем переменные окружения
 S3_KEY_ID = os.getenv("S3_KEY_ID")
 S3_APPLICATION_KEY = os.getenv("S3_APPLICATION_KEY")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "production")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloaded")
-CONFIG_PATH = os.path.join(BASE_DIR, "config", "config_public.json")
+if not all([S3_KEY_ID, S3_APPLICATION_KEY, S3_BUCKET_NAME, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
+    raise RuntimeError("❌ Ошибка: Не установлены все необходимые переменные окружения!")
 
-if not os.path.exists(DOWNLOAD_DIR):
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+bot = Bot(token=TELEGRAM_TOKEN)
 
-if not os.path.exists(CONFIG_PATH):
-    with open(CONFIG_PATH, "w") as f:
-        json.dump({}, f)
-
-try:
-    b2_api.authorize_account("production", S3_KEY_ID, S3_APPLICATION_KEY)
-    print("✅ Авторизация в B2 успешна!")
-except Exception as e:
-    raise RuntimeError(f"❌ Ошибка авторизации в B2: {e}")
+info = b2sdk.v2.InMemoryAccountInfo()
+b2_api = b2sdk.v2.B2Api(info)
+b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
-def load_config():
-    """Загружает config_public.json"""
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
 
-def save_config(data):
-    """Сохраняет config_public.json"""
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+async def process_files():
+    print("🗑 Полная очистка локальной папки перед скачиванием...")
+    shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-def clear_old_files():
-    """Удаляет старые файлы, но сохраняет системные файлы."""
-    print(f"🗑️ Очистка {DOWNLOAD_DIR}...")
-    for file in os.listdir(DOWNLOAD_DIR):
-        if file in [".gitkeep", ".DS_Store"]:
-            continue
-        os.remove(os.path.join(DOWNLOAD_DIR, file))
-    print("✅ Папка очищена.")
+    print("\n📥 Проверяем статус публикации в config_public.json...")
+    published_generation_ids = get_published_generation_ids()
 
-def download_new_files():
-    """Загружает новую группу файлов из B2."""
-    print("📥 Поиск новых файлов в B2...")
-    json_file = None
-    mp4_file = None
+    # Определяем, какие файлы можно публиковать
+    files_to_download = [
+        file_version.file_name for file_version, _ in bucket.ls("444/", recursive=True)
+        if file_version.file_name.endswith(".json")
+    ]
 
-    for file_version, _ in bucket.ls("444/", recursive=True):
-        file_name = file_version.file_name
-        if file_name.endswith(".json"):
-            json_file = file_name
-            mp4_file = file_name.replace(".json", ".mp4")
-            break
-
-    if not json_file or not mp4_file:
-        print("⚠️ Нет новых файлов для загрузки!")
+    if not files_to_download:
+        print(f"⚠️ Нет новых файлов для загрузки из 444/")
         return
 
-    print(f"📥 Скачиваем {json_file} и {mp4_file}...")
-    for file_name in [json_file, mp4_file]:
+    for file_name in files_to_download:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
+
         try:
-            with open(local_path, "wb") as f:
-                bucket.download_file_by_name(file_name).save(f)
-            print(f"✅ {file_name} загружен в {local_path}")
+            print(f"📥 Скачивание {file_name} в {local_path}...")
+            bucket.download_file_by_name(file_name).save_to(local_path)
+
+            with open(local_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            topic_clean = data.get("topic", {}).get("topic", "").strip("'\"")
+            text_content = data.get("text_initial", {}).get("content", "").strip()
+
+            # 🛑 Очистка системных фраз
+            clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', '').strip()
+            clean_text = clean_text.replace("Интересный факт:", "").strip()
+            clean_text = clean_text.replace("🔶 Саркастический комментарий:", "").strip()
+            clean_text = clean_text.replace("🔸 Саркастический вопрос:", "").strip()
+
+            # 🛑 Удаляем лишние эмодзи (оставляем только один в начале)
+            clean_text = clean_text.replace("🏛", "").strip()
+            formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{clean_text}"
+
+            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
+            await asyncio.sleep(1)
+
+            # 📜 Отправка саркастического комментария (если есть)
+            sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
+            if sarcasm_comment:
+                sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
+                await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
+                await asyncio.sleep(1)
+
+            # 🎭 Отправка интерактивного опроса (если есть)
+            if "sarcasm" in data and "poll" in data["sarcasm"]:
+                poll_data = data["sarcasm"]["poll"]
+                question = poll_data.get("question", "").strip()
+                options = poll_data.get("options", [])
+
+                if question and options and len(options) >= 2:
+                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=f"🎭 {question}", options=options, is_anonymous=True)
+                    await asyncio.sleep(1)
+                else:
+                    print("⚠️ Опрос не отправлен. Проверьте данные!")
+
+            update_generation_id_status(file_name)
+
         except Exception as e:
-            print(f"❌ Ошибка загрузки {file_name}: {e}")
+            print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
+
+    print("🚀 Скрипт завершён.")
+
+
+def get_published_generation_ids():
+    """Скачивает config_public.json из B2 и возвращает список опубликованных generation_id."""
+    try:
+        local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
+        bucket.download_file_by_name("config/config_public.json").save_to(local_config_path)
+
+        with open(local_config_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+
+        return set(config_data.get("generation_id", []))  # Возвращаем список опубликованных generation_id
+    except Exception as e:
+        print(f"🚨 Ошибка при загрузке config_public.json: {e}")
+        return set()
+
+
+def update_generation_id_status(file_name):
+    """Добавляет новый generation_id в config_public.json, не удаляя старые записи."""
+    try:
+        local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
+
+        # 📥 Загружаем config_public.json
+        if os.path.exists(local_config_path):
+            with open(local_config_path, "r", encoding="utf-8") as f:
+                config_data = json.load(f)
+        else:
+            config_data = {}
+
+        # 🏷 Извлекаем generation_id из имени файла
+        generation_id = file_name.split("/")[1].split("-")[0]  # Берём ID группы из имени файла
+
+        # ✅ Проверяем, есть ли уже generation_id, сохраняем как список
+        existing_ids = config_data.get("generation_id", [])
+        if not isinstance(existing_ids, list):
+            existing_ids = [existing_ids]  # Преобразуем строку в список, если это старый формат
+
+        if generation_id not in existing_ids:
+            existing_ids.append(generation_id)  # Добавляем новый ID в список
+
+        config_data["generation_id"] = existing_ids  # Записываем в JSON
+
+        # 📤 Загружаем обратно в B2
+        with open(local_config_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, ensure_ascii=False, indent=4)
+
+        bucket.upload_local_file(local_config_path, "config/config_public.json")
+        print(f"✅ Обновлён config_public.json: {config_data['generation_id']}")
+
+    except Exception as e:
+        print(f"🚨 Ошибка при обновлении config_public.json: {e}")
+
 
 if __name__ == "__main__":
-    clear_old_files()
-    download_new_files()
-
-    config = load_config()
-    if config.get("status") == "no public":
-        print("⚠️ Метка 'no public' найдена! Загружаем ещё одну группу и удаляем метку.")
-        download_new_files()
-        save_config({"status": "ready"})
-
-    print("🚀 Запуск module2_publication.py...")
-    subprocess.run(["python", "scripts/module2_publication.py"], check=True)
+    asyncio.run(process_files())
