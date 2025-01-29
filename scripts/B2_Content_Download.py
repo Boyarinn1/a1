@@ -43,20 +43,22 @@ async def process_files():
     print("\n📥 Проверяем статус публикации в config_public.json...")
     published_generation_ids = get_published_generation_ids()
 
-    # Получаем список всех JSON-файлов из 444/, 555/, 666/
-    all_files = [
-        file_version.file_name for folder in ["444/", "555/", "666/"]
-        for file_version, _ in bucket.ls(folder, recursive=True)
-        if file_version.file_name.endswith(".json")
-    ]
+    # Проверяем файлы во всех папках: 444/, 555/, 666/
+    folders = ["444/", "555/", "666/"]
+    files_to_download = []
 
-    # Оставляем только те, которые еще не опубликованы
-    files_to_download = [file for file in all_files if file.split("/")[1].split("-")[0] not in published_generation_ids]
-
+    for folder in folders:
+        folder_files = [
+            file_version.file_name for file_version, _ in bucket.ls(folder, recursive=True)
+            if file_version.file_name.endswith(".json")
+        ]
+        # Добавляем только новые файлы, которые ещё не опубликованы
+        new_files = [file for file in folder_files if "-".join(file.split("/")[1].split("-")[:2]) not in published_generation_ids]
+        files_to_download.extend(new_files)
 
     if not files_to_download:
-        print(f"⚠️ Нет новых файлов для загрузки из 444/")
-        return
+        print(f"⚠️ Нет новых файлов для загрузки во всех папках ({', '.join(folders)})")
+        return  # Останавливаем работу, если файлов нет
 
     for file_name in files_to_download:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
@@ -139,7 +141,7 @@ def update_generation_id_status(file_name):
             config_data = {}
 
         # 🏷 Извлекаем generation_id из имени файла
-        generation_id = file_name.split("/")[1].split("-")[0]  # Берём ID группы из имени файла
+        generation_id = "-".join(file_name.split("/")[1].split("-")[:2]).split(".")[0]  # Берём ID группы из имени файла
 
         # ✅ Проверяем, есть ли уже generation_id, сохраняем как список
         existing_ids = config_data.get("generation_id", [])
