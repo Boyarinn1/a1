@@ -307,7 +307,14 @@ def update_generation_id_status(file_name):
             config_data = {}
 
         # 🏷 Извлекаем generation_id из имени файла
-        generation_id = file_name.split("/")[1].split("-")[0]  # Берём ID группы из имени файла
+        file_name_only = os.path.basename(file_name)  # Берём только имя файла без папки
+        name_parts = file_name_only.split("-")
+
+        if len(name_parts) >= 2:
+            generation_id = "-".join(name_parts[:2]).split(".")[0]  # Должно быть YYYYMMDD-HHMM
+        else:
+            print(f"🚨 Ошибка: {file_name} не содержит корректный generation_id!")
+            return
 
         # ✅ Проверяем, есть ли уже generation_id, сохраняем как список
         existing_ids = config_data.get("generation_id", [])
