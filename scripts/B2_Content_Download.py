@@ -4,12 +4,7 @@ import b2sdk.v2
 import asyncio
 import shutil
 from telegram import Bot
-import os
-import json
-import b2sdk.v2
-import asyncio
-import shutil
-from telegram import Bot
+
 
 # 🔹 Определяем пути
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -140,21 +135,40 @@ def update_generation_id_status(file_name):
         else:
             config_data = {}
 
-        # 🏷 Извлекаем generation_id из имени файла
-        generation_id = "-".join(file_name.split("/")[1].split("-")[:2]).split(".")[0]  # Берём ID группы из имени файла
+        # 🏷 Дебаг извлечения generation_id
+        print(f"📂 Полный путь файла: {file_name}")
 
-        # ✅ Проверяем, есть ли уже generation_id, сохраняем как список
+        parts = file_name.split("/")
+        print(f"📁 Разделённый путь: {parts}")
+
+        if len(parts) < 2:
+            print(f"🚨 Ошибка: file_name не содержит `/` (ожидался формат 'папка/файл.json')")
+            return
+
+        file_name_only = parts[1]  # Берём часть после папки
+        print(f"📄 Имя файла: {file_name_only}")
+
+        name_parts = file_name_only.split("-")
+        print(f"🔍 Разделение имени файла по '-': {name_parts}")
+
+        if len(name_parts) < 2:
+            print(f"🚨 Ошибка: файл не содержит 'YYYYMMDD-HHMM'!")
+            return
+
+        generation_id = "-".join(name_parts[:2]).split(".")[0]
+        print(f"📌 Добавляем generation_id: {generation_id}")
+
+        # ✅ Проверяем, есть ли уже generation_id в config_public.json
         existing_ids = config_data.get("generation_id", [])
         if not isinstance(existing_ids, list):
-            existing_ids = [existing_ids]  # Преобразуем строку в список, если это старый формат
+            existing_ids = [existing_ids]  # Преобразуем в список, если это строка
 
         if generation_id in existing_ids:
             print(f"⚠️ generation_id {generation_id} уже записан, пропускаем обновление.")
-            return  # Если ID уже записан, не дублируем его
+            return
 
         existing_ids.append(generation_id)
-
-        config_data["generation_id"] = existing_ids  # Записываем в JSON
+        config_data["generation_id"] = existing_ids
 
         # 📤 Загружаем обратно в B2
         with open(local_config_path, "w", encoding="utf-8") as f:
