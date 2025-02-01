@@ -316,7 +316,7 @@ def update_generation_id_status(file_name):
         print(f"🔍 Разделение имени файла по '-': {name_parts}")
 
         # ✅ Проверяем, что файл содержит дату и время в формате YYYYMMDD-HHMM
-        if len(name_parts) >= 2 and name_parts[1].isdigit() and len(name_parts[1]) == 4:
+        if len(name_parts) >= 2 and name_parts[1].isdigit():
             generation_id = "-".join(name_parts[:2]).split(".")[0]
         else:
             print(f"🚨 Ошибка: {file_name} не содержит корректный generation_id!")
