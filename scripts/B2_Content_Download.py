@@ -306,25 +306,35 @@ def update_generation_id_status(file_name):
         else:
             config_data = {}
 
-        # 🏷 Извлекаем generation_id из имени файла
-        file_name_only = os.path.basename(file_name)  # Берём только имя файла без папки
-        name_parts = file_name_only.split("-")
+        # 🏷 Дебаг извлечения generation_id
+        print(f"📂 Полный путь файла: {file_name}")
 
-        if len(name_parts) >= 2:
-            generation_id = "-".join(name_parts[:2]).split(".")[0]  # Должно быть YYYYMMDD-HHMM
+        file_name_only = os.path.basename(file_name)  # Берём только имя файла без папки
+        print(f"📄 Имя файла: {file_name_only}")
+
+        name_parts = file_name_only.split("-")
+        print(f"🔍 Разделение имени файла по '-': {name_parts}")
+
+        # ✅ Проверяем, что файл содержит дату и время в формате YYYYMMDD-HHMM
+        if len(name_parts) >= 2 and name_parts[1].isdigit() and len(name_parts[1]) == 4:
+            generation_id = "-".join(name_parts[:2]).split(".")[0]
         else:
             print(f"🚨 Ошибка: {file_name} не содержит корректный generation_id!")
             return
 
-        # ✅ Проверяем, есть ли уже generation_id, сохраняем как список
+        print(f"📌 Итоговый generation_id: {generation_id}")
+
+        # ✅ Проверяем, есть ли уже generation_id в config_public.json
         existing_ids = config_data.get("generation_id", [])
         if not isinstance(existing_ids, list):
-            existing_ids = [existing_ids]  # Преобразуем строку в список, если это старый формат
+            existing_ids = [existing_ids]  # Преобразуем в список, если это строка
 
-        if generation_id not in existing_ids:
-            existing_ids.append(generation_id)  # Добавляем новый ID в список
+        if generation_id in existing_ids:
+            print(f"⚠️ generation_id {generation_id} уже записан, пропускаем обновление.")
+            return
 
-        config_data["generation_id"] = existing_ids  # Записываем в JSON
+        existing_ids.append(generation_id)
+        config_data["generation_id"] = existing_ids
 
         # 📤 Загружаем обратно в B2
         with open(local_config_path, "w", encoding="utf-8") as f:
