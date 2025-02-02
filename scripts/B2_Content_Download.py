@@ -28,9 +28,11 @@ b2_api.authorize_account(S3_ENDPOINT, S3_KEY_ID, S3_APPLICATION_KEY)
 
 bucket = b2_api.get_bucket_by_name(S3_BUCKET_NAME)
 
-
 def get_published_generation_ids():
-    """Загружает config_public.json из B2 и возвращает множество опубликованных generation_id."""
+    """
+    Скачивает config_public.json из B2 и возвращает множество (set) уже опубликованных generation_id.
+    Например: {"20250201-1131", "20250201-1243"}
+    """
     try:
         local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
         bucket.download_file_by_name("config/config_public.json").save_to(local_config_path)
@@ -38,111 +40,70 @@ def get_published_generation_ids():
         with open(local_config_path, "r", encoding="utf-8") as f:
             config_data = json.load(f)
 
+        # Если в файле нет 'generation_id', возвращаем пустое множество
         return set(config_data.get("generation_id", []))
     except Exception as e:
         print(f"🚨 Ошибка при загрузке config_public.json: {e}")
         return set()
 
-
-def update_generation_id_status(file_name: str) -> None:
-    """Добавляет новый generation_id в config_public.json, если его там ещё нет."""
+def save_published_generation_ids(published_ids: set):
+    """
+    Обновляет config_public.json, дополняя поле generation_id новыми значениями из published_ids.
+    """
     try:
         local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
 
-        # 📥 Загружаем config_public.json
+        # Загружаем текущее состояние (если файл уже есть)
         if os.path.exists(local_config_path):
             with open(local_config_path, "r", encoding="utf-8") as f:
                 config_data = json.load(f)
         else:
             config_data = {}
 
-        print(f"📂 Полный путь файла: {file_name}")
-        file_name_only = os.path.basename(file_name)  # например, 20250201-1131.json
-        print(f"📄 Имя файла: {file_name_only}")
+        # Перезаписываем поле generation_id
+        config_data["generation_id"] = list(published_ids)
 
-        # Убираем .json (если есть) и разбиваем по '-'
-        base_name = file_name_only.rsplit(".", 1)[0]  # 20250201-1131
-        parts = base_name.split("-")
-        print(f"🔍 Разделение имени файла по '-': {parts}")
-
-        if len(parts) < 2:
-            print(f"🚨 Ошибка: файл не содержит 'YYYYMMDD-HHMM'!")
-            return
-
-        generation_id = "-".join(parts[:2])  # 20250201-1131
-        print(f"📌 Итоговый generation_id: {generation_id}")
-
-        existing_ids = config_data.get("generation_id", [])
-        if not isinstance(existing_ids, list):
-            existing_ids = [existing_ids]
-
-        if generation_id in existing_ids:
-            print(f"⚠️ generation_id {generation_id} уже записан, пропускаем обновление.")
-            return
-
-        existing_ids.append(generation_id)
-        config_data["generation_id"] = existing_ids
-
-        # 📤 Сохраняем локально
+        # Сохраняем локально
         with open(local_config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, ensure_ascii=False, indent=4)
 
-        # 📤 Загружаем обратно в B2
+        # И загружаем обратно в B2
         bucket.upload_local_file(local_config_path, "config/config_public.json")
         print(f"✅ Обновлён config_public.json: {config_data['generation_id']}")
-
     except Exception as e:
         print(f"🚨 Ошибка при обновлении config_public.json: {e}")
 
+async def process_one_generation_id(gen_id: str, folder: str, published_ids: set) -> bool:
+    """
+    Обрабатывает (скачивает и отправляет в TG) все файлы внутри папки `folder`,
+    у которых generation_id == gen_id. Возвращает True, если отправили
+    хотя бы одно сообщение (успешная публикация).
+    """
 
-async def process_files():
-    print("🗑 Полная очистка локальной папки перед скачиванием...")
-    shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    # Ищем среди всех json-файлов папки те, у кого basename (без .json) == gen_id
+    all_files = [
+        file_version.file_name
+        for file_version, _ in bucket.ls(folder, recursive=True)
+        if file_version.file_name.endswith(".json")
+    ]
 
-    print("\n📥 Проверяем статус публикации в config_public.json...")
-    published_generation_ids = get_published_generation_ids()
+    target_files = []
+    for f_name in all_files:
+        basename = os.path.basename(f_name)       # "20250201-1131.json"
+        base_noext = basename.rsplit(".", 1)[0]   # "20250201-1131"
+        if base_noext == gen_id:
+            target_files.append(f_name)
 
-    # Собираем список папок, в которых ищем файлы
-    folders = ["444/", "555/", "666/"]
+    if not target_files:
+        print(f"⚠️ Не найдено файлов для gen_id={gen_id} в папке {folder}")
+        return False
 
-    files_to_download = []
-
-    # Ищем json-файлы в каждой папке, которые ещё не публиковали
-    for folder in folders:
+    messages_sent = 0
+    for f_name in target_files:
+        local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(f_name))
         try:
-            folder_files = [
-                file_version.file_name
-                for file_version, _ in bucket.ls(folder, recursive=True)
-                if file_version.file_name.endswith(".json")
-            ]
-
-            # Фильтруем по unpublished generation_id
-            for f_name in folder_files:
-                file_name_only = os.path.basename(f_name)
-                base_name = file_name_only.rsplit(".", 1)[0]
-                parts = base_name.split("-")
-                if len(parts) < 2:
-                    # Если формат имени не подходит, пропустим
-                    continue
-                gen_id = "-".join(parts[:2])
-                if gen_id not in published_generation_ids:
-                    files_to_download.append(f_name)
-        except Exception as e:
-            print(f"🚨 Ошибка при получении списка файлов в {folder}: {e}")
-
-    if not files_to_download:
-        print(f"⚠️ Нет новых файлов для загрузки во всех папках ({', '.join(folders)})")
-        return  # Останавливаем работу, если файлов нет
-
-    message_count = 0
-
-    for file_name in files_to_download:
-        local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
-
-        try:
-            print(f"📥 Скачивание {file_name} в {local_path}...")
-            bucket.download_file_by_name(file_name).save_to(local_path)
+            print(f"📥 Скачивание {f_name} в {local_path}...")
+            bucket.download_file_by_name(f_name).save_to(local_path)
 
             with open(local_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -150,18 +111,11 @@ async def process_files():
             topic_clean = data.get("topic", {}).get("topic", "").strip("'\"")
             text_content = data.get("text_initial", {}).get("content", "").strip()
 
-            # 🛑 Очистка системных фраз / эмодзи
-            clean_text = text_content.replace(f'Сгенерированный текст на тему: "{topic_clean}"', "").strip()
-            clean_text = clean_text.replace("Интересный факт:", "").strip()
-            clean_text = clean_text.replace("🔶 Саркастический комментарий:", "").strip()
-            clean_text = clean_text.replace("🔸 Саркастический вопрос:", "").strip()
-            clean_text = clean_text.lstrip("🏛").strip()  # Убираем лишнюю иконку, если есть
-
-            if clean_text:
-                formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{clean_text}"
+            if text_content:
+                formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{text_content}"
                 print(f"📨 Отправляем в Telegram: {formatted_text}")
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
-                message_count += 1
+                messages_sent += 1
 
             # Саркастический комментарий
             sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
@@ -169,7 +123,7 @@ async def process_files():
                 sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
                 print(f"📨 Отправляем саркастический комментарий: {sarcasm_text}")
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
-                message_count += 1
+                messages_sent += 1
 
             # Опрос (poll)
             if "sarcasm" in data and "poll" in data["sarcasm"]:
@@ -179,20 +133,77 @@ async def process_files():
 
                 if question and options and len(options) >= 2:
                     print(f"📊 Отправляем опрос: {question}")
-                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=f"🎭 {question}", options=options, is_anonymous=True)
-                    message_count += 1
-                else:
-                    print("⚠️ Опрос не отправлен. Проверьте данные!")
+                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID,
+                                        question=f"🎭 {question}",
+                                        options=options,
+                                        is_anonymous=True)
+                    messages_sent += 1
 
-            # Обновляем config_public.json
-            update_generation_id_status(file_name)
+            # Перемещаем обработанный файл в папку processed
+            processed_dir = os.path.join(BASE_DIR, "data", "processed")
+            os.makedirs(processed_dir, exist_ok=True)
+            shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
+            print(f"🗑 Файл {f_name} перемещён в архив processed.")
 
         except Exception as e:
-            print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
+            print(f"🚨 Ошибка при обработке файла {f_name}: {e}")
 
-    print(f"📊 Всего отправлено сообщений: {message_count}")
-    print("🚀 Скрипт завершён.")
+    # Если что-то отправили, записываем gen_id в config_public.json
+    if messages_sent > 0:
+        published_ids.add(gen_id)
+        save_published_generation_ids(published_ids)
+        return True
+    else:
+        print(f"⚠️ Группа {gen_id} не отправила ни одного сообщения (все тексты пустые?).")
+        return False
 
+async def process_files():
+    print("🗑 Полная очистка локальной папки перед скачиванием...")
+    shutil.rmtree(DOWNLOAD_DIR, ignore_errors=True)
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+    print("\n📥 Проверяем статус публикации в config_public.json...")
+    published_ids = get_published_generation_ids()
+
+    # Проходим папки по порядку (444 -> 555 -> 666)
+    folders = ["444/", "555/", "666/"]
+
+    for folder in folders:
+        print(f"\n📁 Сканируем папку: {folder}")
+        # Получаем список .json-файлов
+        all_files = [
+            file_version.file_name
+            for file_version, _ in bucket.ls(folder, recursive=True)
+            if file_version.file_name.endswith(".json")
+        ]
+
+        # Собираем все generation_id, которые встречаются в этой папке
+        folder_generation_ids = set()
+        for f_name in all_files:
+            basename = os.path.basename(f_name)         # "20250201-1131.json"
+            base_noext = basename.rsplit(".", 1)[0]     # "20250201-1131"
+            folder_generation_ids.add(base_noext)
+
+        # Сортируем для воспроизводимого порядка (необязательно)
+        for gen_id in sorted(folder_generation_ids):
+            # Если уже опубликован, пропускаем
+            if gen_id in published_ids:
+                continue
+
+            # Публикуем (это будет "одна группа")
+            print(f"🔎 Найдена новая группа: {gen_id}. Пытаемся опубликовать...")
+            success = await process_one_generation_id(gen_id, folder, published_ids)
+            if success:
+                print("✅ Опубликовали одну группу, завершаем скрипт.")
+                return  # Заканчиваем полностью
+            else:
+                # Если успеха не было (пустые данные?), переходим к следующему gen_id
+                print(f"⚠️ Группа {gen_id} не опубликована, пробуем следующий.")
+
+        print(f"ℹ️ В папке {folder} не осталось новых (неопубликованных) групп.")
+        # Переходим к следующей папке
+
+    print("🚀 Во всех папках нет новых групп для публикации. Скрипт завершён.")
 
 if __name__ == "__main__":
     asyncio.run(process_files())
