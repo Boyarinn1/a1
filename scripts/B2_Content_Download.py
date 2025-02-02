@@ -76,20 +76,21 @@ def save_published_generation_ids(published_ids: set):
 async def process_one_generation_id(gen_id: str, folder: str, published_ids: set) -> bool:
     """
     Обрабатывает (скачивает и отправляет в TG) все файлы внутри папки `folder`,
-    у которых generation_id == gen_id. Возвращает True, если отправили
-    хотя бы одно сообщение (успешная публикация).
+    у которых basename (без .json) == gen_id.
+    Возвращает True, если отправили хотя бы одно сообщение (успешная публикация).
     """
 
-    # Ищем среди всех json-файлов папки те, у кого basename (без .json) == gen_id
+    # 1. Получаем список файлов .json в текущей папке
     all_files = [
         file_version.file_name
         for file_version, _ in bucket.ls(folder, recursive=True)
         if file_version.file_name.endswith(".json")
     ]
 
+    # 2. Отбираем только те, у кого basename (без .json) совпадает с gen_id
     target_files = []
     for f_name in all_files:
-        basename = os.path.basename(f_name)       # "20250201-1131.json"
+        basename = os.path.basename(f_name)       # Пример: "20250201-1131.json"
         base_noext = basename.rsplit(".", 1)[0]   # "20250201-1131"
         if base_noext == gen_id:
             target_files.append(f_name)
@@ -99,25 +100,37 @@ async def process_one_generation_id(gen_id: str, folder: str, published_ids: set
         return False
 
     messages_sent = 0
+
+    # 3. Последовательно обрабатываем каждый файл из выбранной группы
     for f_name in target_files:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(f_name))
         try:
             print(f"📥 Скачивание {f_name} в {local_path}...")
             bucket.download_file_by_name(f_name).save_to(local_path)
 
+            # --- Добавляем отладку: вывод «сырых» данных и итогового парсинга ---
             with open(local_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                raw_content = f.read()
+                print(f"🔍 DEBUG (raw JSON) для файла {f_name}:\n{raw_content}")
+                data = json.loads(raw_content)
 
+            # Теперь извлекаем поля из JSON
             topic_clean = data.get("topic", {}).get("topic", "").strip("'\"")
             text_content = data.get("text_initial", {}).get("content", "").strip()
 
+            # Отладочный принт для parsed-данных
+            print(f"🔎 DEBUG (parsed) для файла {f_name}:")
+            print(f"    topic_clean = '{topic_clean}'")
+            print(f"    text_content = '{text_content}'")
+
+            # --- Логика отправки в Telegram ---
             if text_content:
                 formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{text_content}"
                 print(f"📨 Отправляем в Telegram: {formatted_text}")
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
                 messages_sent += 1
 
-            # Саркастический комментарий
+            # Отправка саркастического комментария
             sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
             if sarcasm_comment:
                 sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
@@ -125,7 +138,7 @@ async def process_one_generation_id(gen_id: str, folder: str, published_ids: set
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
                 messages_sent += 1
 
-            # Опрос (poll)
+            # Отправка опроса (poll), если есть
             if "sarcasm" in data and "poll" in data["sarcasm"]:
                 poll_data = data["sarcasm"]["poll"]
                 question = poll_data.get("question", "").strip()
@@ -133,13 +146,17 @@ async def process_one_generation_id(gen_id: str, folder: str, published_ids: set
 
                 if question and options and len(options) >= 2:
                     print(f"📊 Отправляем опрос: {question}")
-                    await bot.send_poll(chat_id=TELEGRAM_CHAT_ID,
-                                        question=f"🎭 {question}",
-                                        options=options,
-                                        is_anonymous=True)
+                    await bot.send_poll(
+                        chat_id=TELEGRAM_CHAT_ID,
+                        question=f"🎭 {question}",
+                        options=options,
+                        is_anonymous=True
+                    )
                     messages_sent += 1
+                else:
+                    print("⚠️ Опрос не отправлен. Проверьте данные!")
 
-            # Перемещаем обработанный файл в папку processed
+            # --- Перемещаем файл в папку processed ---
             processed_dir = os.path.join(BASE_DIR, "data", "processed")
             os.makedirs(processed_dir, exist_ok=True)
             shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
@@ -148,8 +165,9 @@ async def process_one_generation_id(gen_id: str, folder: str, published_ids: set
         except Exception as e:
             print(f"🚨 Ошибка при обработке файла {f_name}: {e}")
 
-    # Если что-то отправили, записываем gen_id в config_public.json
+    # 4. Если хотя бы одно сообщение было отправлено, генерируем результат
     if messages_sent > 0:
+        # Добавляем gen_id в опубликованные
         published_ids.add(gen_id)
         save_published_generation_ids(published_ids)
         return True
