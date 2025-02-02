@@ -38,22 +38,29 @@ async def process_files():
     print("\n📥 Проверяем статус публикации в config_public.json...")
     published_generation_ids = get_published_generation_ids()
 
-    # Проверяем файлы во всех папках: 444/, 555/, 666/
-    folders = ["444/", "555/", "666/"]
+    # ✅ ОБЪЯВЛЯЕМ files_to_download В НАЧАЛЕ
     files_to_download = []
 
+    # Проверяем файлы во всех папках: 444/, 555/, 666/
+    folders = ["444/", "555/", "666/"]
+
     for folder in folders:
-        folder_files = [
-            file_version.file_name for file_version, _ in bucket.ls(folder, recursive=True)
-            if file_version.file_name.endswith(".json")
-        ]
-        # Добавляем только новые файлы, которые ещё не опубликованы
-        new_files = [file for file in folder_files if "-".join(file.split("/")[1].split("-")[:2]) not in published_generation_ids]
-        files_to_download.extend(new_files)
+        try:
+            folder_files = [
+                file_version.file_name for file_version, _ in bucket.ls(folder, recursive=True)
+                if file_version.file_name.endswith(".json")
+            ]
+            # Добавляем только новые файлы, которые ещё не опубликованы
+            new_files = [file for file in folder_files if "-".join(file.split("/")[1].split("-")[:2]) not in published_generation_ids]
+            files_to_download.extend(new_files)
+        except Exception as e:
+            print(f"🚨 Ошибка при получении списка файлов в {folder}: {e}")
 
     if not files_to_download:
         print(f"⚠️ Нет новых файлов для загрузки во всех папках ({', '.join(folders)})")
         return  # Останавливаем работу, если файлов нет
+
+    message_count = 0  # Считаем количество отправленных сообщений
 
     for file_name in files_to_download:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_name))
@@ -73,30 +80,33 @@ async def process_files():
             clean_text = clean_text.replace("Интересный факт:", "").strip()
             clean_text = clean_text.replace("🔶 Саркастический комментарий:", "").strip()
             clean_text = clean_text.replace("🔸 Саркастический вопрос:", "").strip()
+            clean_text = clean_text.lstrip("🏛").strip()  # Удаляем лишние эмодзи в начале
 
-            # 🛑 Удаляем лишние эмодзи (оставляем только один в начале)
-            clean_text = clean_text.replace("🏛", "").strip()
-            formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{clean_text}"
+            # 📨 Отправляем основное сообщение (только если текст не пустой)
+            if clean_text.strip():
+                formatted_text = f"🏛 <b>{topic_clean}</b>\n\n{clean_text}"
+                print(f"📨 Отправляем в Telegram: {formatted_text}")
+                await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
+                message_count += 1
 
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formatted_text, parse_mode="HTML")
-            await asyncio.sleep(1)
-
-            # 📜 Отправка саркастического комментария (если есть)
+            # 📜 Отправляем саркастический комментарий (если есть)
             sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
             if sarcasm_comment:
                 sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
+                print(f"📨 Отправляем саркастический комментарий: {sarcasm_text}")
                 await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
-                await asyncio.sleep(1)
+                message_count += 1
 
-            # 🎭 Отправка интерактивного опроса (если есть)
+            # 🎭 Отправляем опрос (если есть)
             if "sarcasm" in data and "poll" in data["sarcasm"]:
                 poll_data = data["sarcasm"]["poll"]
                 question = poll_data.get("question", "").strip()
                 options = poll_data.get("options", [])
 
                 if question and options and len(options) >= 2:
+                    print(f"📊 Отправляем опрос: {question}")
                     await bot.send_poll(chat_id=TELEGRAM_CHAT_ID, question=f"🎭 {question}", options=options, is_anonymous=True)
-                    await asyncio.sleep(1)
+                    message_count += 1
                 else:
                     print("⚠️ Опрос не отправлен. Проверьте данные!")
 
@@ -105,8 +115,8 @@ async def process_files():
         except Exception as e:
             print(f"🚨 Ошибка при обработке файла {file_name}: {e}")
 
+    print(f"📊 Всего отправлено сообщений: {message_count}")
     print("🚀 Скрипт завершён.")
-
 
 def get_published_generation_ids():
     """Скачивает config_public.json из B2 и возвращает список опубликованных generation_id."""
