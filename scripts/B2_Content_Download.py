@@ -119,63 +119,73 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: set) ->
         with open(local_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # Тема + контент
+        # ---------- ОБРАБОТКА TOPIC -----------
         raw_topic = data.get("topic", "")
-
-        if isinstance(raw_topic, str):
-            # Если topic — строка, просто strip
-            topic = raw_topic.strip("'\"")
-        elif isinstance(raw_topic, dict):
-            # Если topic — словарь, берём из него full_topic
-            topic_full = raw_topic.get("full_topic", "")
-            if isinstance(topic_full, str):
-                topic = topic_full.strip("'\"")
+        if isinstance(raw_topic, dict):
+            # Если topic - словарь, берём full_topic
+            topic = raw_topic.get("full_topic", "")
+            if isinstance(topic, str):
+                topic = topic.strip("'\"")
             else:
                 topic = ""
+        elif isinstance(raw_topic, str):
+            # Если topic - строка, обрабатываем
+            topic = raw_topic.strip("'\"")
         else:
-            # Если topic — ни строка, ни словарь, пустая строка
+            # Иначе пустая строка
             topic = ""
 
+        # Удаляем системные фразы из контента
         content = data.get("content", "").strip()
         content = remove_system_phrases(content)
 
-        # (1) Текст
+        # (1) Текстовое сообщение
         if content:
             if topic:
                 text_send = f"🏛 <b>{topic}</b>\n\n{content}"
             else:
                 text_send = content
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text_send, parse_mode="HTML")
+            await bot.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=text_send,
+                parse_mode="HTML"
+            )
             messages_sent += 1
 
         # (2) Сарказм
         sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
         if sarcasm_comment:
             sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=sarcasm_text, parse_mode="HTML")
+            await bot.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=sarcasm_text,
+                parse_mode="HTML"
+            )
             messages_sent += 1
 
         # (3) Опрос
         poll = data.get("sarcasm", {}).get("poll", {})
-        question = poll.get("question", "").strip()
-        options = poll.get("options", [])
+        # Обрезаем вопрос и варианты до 99 символов, чтобы не вызвать BadRequest
+        question = poll.get("question", "").strip()[:99]
+        options = [opt.strip()[:99] for opt in poll.get("options", [])]
+
         if question and len(options) >= 2:
             poll_question = f"🎭 {question}"
             await bot.send_poll(
                 chat_id=TELEGRAM_CHAT_ID,
                 question=poll_question,
                 options=options,
-                is_anonymous=True
+                is_anonymous=True  # Или False, если нужен открытый опрос
             )
             messages_sent += 1
 
-        # Перемещаем файл
+        # Перемещаем обработанный файл
         processed_dir = os.path.join(DOWNLOAD_DIR, "processed")
         os.makedirs(processed_dir, exist_ok=True)
         shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
         print(f"🗑 Файл {file_key} перемещён в {processed_dir}")
 
-    # Добавляем gen_id в published_ids
+    # Добавляем gen_id в published_ids и сохраняем
     published_ids.add(gen_id)
     save_published_ids(published_ids)
 
