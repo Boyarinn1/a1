@@ -120,7 +120,18 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: set) ->
             data = json.load(f)
 
         # Тема + контент
-        topic = data.get("topic", "").strip("'\"")
+        # если topic - словарь, берем full_topic
+        topic_dict = data.get("topic", {})
+        if isinstance(topic_dict, dict):
+            topic = topic_dict.get("full_topic", "").strip("'\"")
+        else:
+            # если topic не словарь, но строка, лишний раз обработаем
+            # а если не строка, дадим пустую строку
+            if isinstance(topic_dict, str):
+                topic = topic_dict.strip("'\"")
+            else:
+                topic = ""
+
         content = data.get("content", "").strip()
         content = remove_system_phrases(content)
 
