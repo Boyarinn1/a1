@@ -119,20 +119,21 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: set) ->
         with open(local_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # --- Изменения только тут: учитываем, что "topic" может быть словарём (берём full_topic) ---
+        # Тема + контент
         raw_topic = data.get("topic", "")
-        if isinstance(raw_topic, dict):
-            # если topic - словарь, берём "full_topic"
-            topic = raw_topic.get("full_topic", "")
-            if isinstance(topic, str):
-                topic = topic.strip("'\"")
+
+        if isinstance(raw_topic, str):
+            # Если topic — строка, просто strip
+            topic = raw_topic.strip("'\"")
+        elif isinstance(raw_topic, dict):
+            # Если topic — словарь, берём из него full_topic
+            topic_full = raw_topic.get("full_topic", "")
+            if isinstance(topic_full, str):
+                topic = topic_full.strip("'\"")
             else:
                 topic = ""
-        elif isinstance(raw_topic, str):
-            # если topic - строка
-            topic = raw_topic.strip("'\"")
         else:
-            # если что-то другое (напр., None или список)
+            # Если topic — ни строка, ни словарь, пустая строка
             topic = ""
 
         content = data.get("content", "").strip()
@@ -164,7 +165,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: set) ->
                 chat_id=TELEGRAM_CHAT_ID,
                 question=poll_question,
                 options=options,
-                is_anonymous=True  # Можно сменить на False, если нужен неанонимный опрос.
+                is_anonymous=True
             )
             messages_sent += 1
 
