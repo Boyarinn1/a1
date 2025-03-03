@@ -84,34 +84,58 @@ def remove_system_phrases(text: str) -> str:
         "🔥Вступление", "📚Основная часть", "🔍Интересный факт"
     ]
     clean = text
-    # Убираем системные заголовки
     for phrase in system_phrases:
         clean = clean.replace(phrase, "")
-
-    # Сжимаем последовательности пустых строк до 1 двойного переноса
     clean = re.sub(r"\n\s*\n+", "\n\n", clean)
-
     return clean.strip()
 
 # ------------------------------------------------------------
-# 4) Публикация одного JSON (до 3 сообщений)
+# 4) Публикация одного JSON (с видео и до 3 сообщений)
 # ------------------------------------------------------------
 async def publish_generation_id(gen_id: str, folder: str, published_ids: set) -> bool:
-    # Ищем {gen_id}.json
-    matches = []
+    # Ищем файлы: {gen_id}.json и {gen_id}.mp4
+    json_matches = []
+    video_file_key = None
     for file_version, _ in bucket.ls(folder, recursive=True):
-        if file_version.file_name.endswith(".json"):
-            basename = os.path.basename(file_version.file_name)
-            base_noext = basename.rsplit(".", 1)[0]
-            if base_noext == gen_id:
-                matches.append(file_version.file_name)
+        file_name = file_version.file_name
+        basename = os.path.basename(file_name)
+        base_noext = basename.rsplit(".", 1)[0]
+        if base_noext == gen_id:
+            if file_name.endswith(".json"):
+                json_matches.append(file_name)
+            elif file_name.endswith(".mp4"):
+                video_file_key = file_name
 
-    if not matches:
+    if not json_matches:
         print(f"⚠️ Не найден файл {gen_id}.json в папке {folder}")
         return False
 
     messages_sent = 0
-    for file_key in matches:
+    processed_dir = os.path.join(DOWNLOAD_DIR, "processed")
+    os.makedirs(processed_dir, exist_ok=True)
+
+    # Скачиваем и отправляем видео, если оно есть
+    if video_file_key:
+        video_local_path = os.path.join(DOWNLOAD_DIR, f"{gen_id}.mp4")
+        print(f"📥 Скачиваем видео {video_file_key} -> {video_local_path}")
+        try:
+            bucket.download_file_by_name(video_file_key).save_to(video_local_path)
+            with open(video_local_path, "rb") as video_file:
+                await bot.send_video(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    video=video_file,
+                    supports_streaming=True
+                )
+            messages_sent += 1
+            print(f"✅ Видео {gen_id}.mp4 отправлено в Telegram")
+            # Перемещаем видео в processed
+            shutil.move(video_local_path, os.path.join(processed_dir, f"{gen_id}.mp4"))
+            print(f"🗑 Видео {gen_id}.mp4 перемещено в {processed_dir}")
+        except Exception as e:
+            print(f"⚠️ Ошибка при отправке видео {gen_id}.mp4: {e}")
+
+    # Обрабатываем JSON-файлы
+    for file_key in json_matches:
         local_path = os.path.join(DOWNLOAD_DIR, os.path.basename(file_key))
         print(f"📥 Скачиваем {file_key} -> {local_path}")
         bucket.download_file_by_name(file_key).save_to(local_path)
@@ -122,17 +146,10 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: set) ->
         # ---------- ОБРАБОТКА TOPIC -----------
         raw_topic = data.get("topic", "")
         if isinstance(raw_topic, dict):
-            # Если topic - словарь, берём full_topic
-            topic = raw_topic.get("full_topic", "")
-            if isinstance(topic, str):
-                topic = topic.strip("'\"")
-            else:
-                topic = ""
+            topic = raw_topic.get("full_topic", "").strip("'\"") if isinstance(raw_topic.get("full_topic"), str) else ""
         elif isinstance(raw_topic, str):
-            # Если topic - строка, обрабатываем
             topic = raw_topic.strip("'\"")
         else:
-            # Иначе пустая строка
             topic = ""
 
         # Удаляем системные фразы из контента
@@ -165,7 +182,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: set) ->
 
         # (3) Опрос
         poll = data.get("sarcasm", {}).get("poll", {})
-        # Обрезаем вопрос и варианты до 99 символов, чтобы не вызвать BadRequest
         question = poll.get("question", "").strip()[:99]
         options = [opt.strip()[:99] for opt in poll.get("options", [])]
 
@@ -175,13 +191,11 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: set) ->
                 chat_id=TELEGRAM_CHAT_ID,
                 question=poll_question,
                 options=options,
-                is_anonymous=True  # Или False, если нужен открытый опрос
+                is_anonymous=True
             )
             messages_sent += 1
 
-        # Перемещаем обработанный файл
-        processed_dir = os.path.join(DOWNLOAD_DIR, "processed")
-        os.makedirs(processed_dir, exist_ok=True)
+        # Перемещаем обработанный JSON-файл
         shutil.move(local_path, os.path.join(processed_dir, os.path.basename(local_path)))
         print(f"🗑 Файл {file_key} перемещён в {processed_dir}")
 
@@ -231,7 +245,6 @@ async def main():
         print(f"ℹ️ В папке {folder} не осталось новых групп для публикации.")
 
     print("🚀 Нет новых групп во всех папках. Скрипт завершён.")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
