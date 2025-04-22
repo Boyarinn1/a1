@@ -71,7 +71,7 @@ def load_published_ids() -> Set[str]:
         if isinstance(published, list):
              published_ids = set(published)
         print(f"ℹ️ Загружено {len(published_ids)} опубликованных ID из {config_key}.")
-    except b2sdk.exception.FileNotPresent as e:
+    except b2sdk.v2.FileNotPresent as e:
          print(f"⚠️ Файл {config_key} не найден в B2. Будет создан новый.")
          # Если файла нет, создаем пустой set, он будет сохранен позже
     except Exception as e:
@@ -140,7 +140,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         # Убедимся, что папка для скачивания существует
         os.makedirs(os.path.dirname(local_json_path), exist_ok=True)
         bucket.download_file_by_name(json_file_key).save_to(local_json_path)
-    except b2sdk.exception.FileNotPresent:
+    except b2sdk.v2.FileNotPresent:
         print(f"⚠️ JSON файл не найден: {json_file_key}")
         return False # Не можем продолжить без JSON
     except Exception as e:
@@ -154,7 +154,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         bucket.download_file_by_name(video_file_key).save_to(local_video_path)
         video_downloaded = True
         print(f"✅ Видео скачано: {local_video_path}")
-    except b2sdk.exception.FileNotPresent:
+    except b2sdk.v2.FileNotPresent:
         print(f"ℹ️ Видео не найдено для {gen_id}, продолжаем без него.")
         video_file_key = None # Сбрасываем ключ видео, если его нет
     except Exception as e:
