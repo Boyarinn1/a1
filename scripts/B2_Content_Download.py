@@ -7,7 +7,7 @@ from telegram import Bot
 import b2sdk.v2
 import re
 from typing import Set, List, Tuple
-
+from b2sdk.v2.exception import FileNotPresent, B2Error
 # ------------------------------------------------------------
 # 1) Считываем переменные окружения
 # ------------------------------------------------------------
@@ -52,6 +52,9 @@ except Exception as e:
 # ------------------------------------------------------------
 # Работа с config_public.json (отслеживание опубликованных)
 # ------------------------------------------------------------
+# ------------------------------------------------------------
+# Работа с config_public.json (отслеживание опубликованных)
+# ------------------------------------------------------------
 def load_published_ids() -> Set[str]:
     """
     Загружает список ID уже опубликованных постов из config_public.json в B2.
@@ -64,19 +67,25 @@ def load_published_ids() -> Set[str]:
         print(f"📥 Пытаемся скачать {config_key}...")
         # Убедимся, что папка для скачивания существует
         os.makedirs(os.path.dirname(local_config), exist_ok=True)
-        bucket.download_file_by_name(config_key).save_to(local_config)
+        bucket.download_file_by_name(config_key).save_to(local_config) # Попытка скачивания
         with open(local_config, "r", encoding="utf-8") as f:
             data = json.load(f)
         published = data.get("generation_id", [])
         if isinstance(published, list):
              published_ids = set(published)
         print(f"ℹ️ Загружено {len(published_ids)} опубликованных ID из {config_key}.")
-    except b2sdk.v2.FileNotPresent as e:
+    except FileNotPresent as e: # ИСПРАВЛЕНО: Ловим FileNotPresent из b2sdk.v2.exception
          print(f"⚠️ Файл {config_key} не найден в B2. Будет создан новый.")
          # Если файла нет, создаем пустой set, он будет сохранен позже
-    except Exception as e:
+    except B2Error as e: # ИСПРАВЛЕНО: Ловим другие ошибки B2 SDK
+        print(f"⚠️ Ошибка B2 SDK при скачивании {config_key}: {e}. Используем пустой список.")
+    except Exception as e: # Оставляем обработку прочих ошибок (JSONDecodeError и т.д.)
         print(f"⚠️ Не удалось загрузить или прочитать {config_key}: {e}. Используем пустой список.")
     return published_ids
+
+# Функция save_published_ids остается без изменений
+# def save_published_ids(pub_ids: Set[str]):
+#    ... (ваш код без изменений) ...
 
 def save_published_ids(pub_ids: Set[str]):
     """
@@ -121,6 +130,9 @@ def remove_system_phrases(text: str) -> str:
 # ------------------------------------------------------------
 # 4) Публикация одного JSON (с видео и до 3 сообщений)
 # ------------------------------------------------------------
+# ------------------------------------------------------------
+# 4) Публикация одного JSON (с видео и до 3 сообщений)
+# ------------------------------------------------------------
 async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str]) -> bool:
     """
     Публикует контент для одного generation_id (JSON + опционально видео).
@@ -135,30 +147,38 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     local_video_path = os.path.join(DOWNLOAD_DIR, f"{gen_id}.mp4")
     video_downloaded = False
 
+    # Скачиваем JSON
     try:
         print(f"📥 Скачиваем JSON: {json_file_key} -> {local_json_path}")
         # Убедимся, что папка для скачивания существует
         os.makedirs(os.path.dirname(local_json_path), exist_ok=True)
-        bucket.download_file_by_name(json_file_key).save_to(local_json_path)
-    except b2sdk.v2.FileNotPresent:
+        bucket.download_file_by_name(json_file_key).save_to(local_json_path) # Попытка скачивания JSON
+    except FileNotPresent: # ИСПРАВЛЕНО: Ловим FileNotPresent из b2sdk.v2.exception
         print(f"⚠️ JSON файл не найден: {json_file_key}")
         return False # Не можем продолжить без JSON
-    except Exception as e:
-        print(f"⚠️ Ошибка при скачивании JSON {json_file_key}: {e}")
+    except B2Error as e: # ИСПРАВЛЕНО: Ловим другие ошибки B2 SDK при скачивании JSON
+        print(f"⚠️ Ошибка B2 SDK при скачивании JSON {json_file_key}: {e}")
+        return False
+    except Exception as e: # Оставляем обработку других ошибок при скачивании JSON
+        print(f"⚠️ Неожиданная ошибка при скачивании JSON {json_file_key}: {e}")
         return False
 
+    # Пытаемся скачать видео
     try:
         print(f"📥 Пытаемся скачать видео: {video_file_key} -> {local_video_path}")
          # Убедимся, что папка для скачивания существует
         os.makedirs(os.path.dirname(local_video_path), exist_ok=True)
-        bucket.download_file_by_name(video_file_key).save_to(local_video_path)
+        bucket.download_file_by_name(video_file_key).save_to(local_video_path) # Попытка скачивания видео
         video_downloaded = True
         print(f"✅ Видео скачано: {local_video_path}")
-    except b2sdk.v2.FileNotPresent:
+    except FileNotPresent: # ИСПРАВЛЕНО: Ловим FileNotPresent из b2sdk.v2.exception
         print(f"ℹ️ Видео не найдено для {gen_id}, продолжаем без него.")
-        video_file_key = None # Сбрасываем ключ видео, если его нет
-    except Exception as e:
-        print(f"⚠️ Ошибка при скачивании видео {video_file_key}: {e}")
+        # video_file_key = None # Это присваивание не нужно, т.к. video_downloaded остается False
+    except B2Error as e: # ИСПРАВЛЕНО: Ловим другие ошибки B2 SDK при скачивании видео
+        print(f"⚠️ Ошибка B2 SDK при скачивании видео {video_file_key}: {e}")
+        # Продолжаем без видео, но логируем ошибку
+    except Exception as e: # Оставляем обработку других ошибок при скачивании видео
+        print(f"⚠️ Неожиданная ошибка при скачивании видео {video_file_key}: {e}")
         # Продолжаем без видео, но логируем ошибку
 
     # --- Отправка в Telegram ---
@@ -191,6 +211,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             data = json.load(f)
 
         # ---------- ОБРАБОТКА TOPIC -----------
+        # (Ваш код обработки topic без изменений)
         raw_topic = data.get("topic", "")
         topic = ""
         if isinstance(raw_topic, dict):
@@ -201,42 +222,40 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                  topic = ""
         elif isinstance(raw_topic, str):
             topic = raw_topic.strip("'\" ")
-        # Если topic пустой после очистки, делаем его None или пустой строкой
         topic = topic if topic else ""
+
 
         # Удаляем системные фразы из контента
         content = data.get("content", "").strip()
-        content = remove_system_phrases(content)
+        content = remove_system_phrases(content) # Используем вашу функцию remove_system_phrases
 
         # (1) Текстовое сообщение
         if content:
             text_to_send = ""
             if topic:
-                # Формируем заголовок жирным шрифтом
                 text_to_send = f"🏛 <b>{topic}</b>\n\n{content}"
             else:
                 text_to_send = content
 
-            # Проверка длины сообщения (Telegram лимит 4096 символов)
             if len(text_to_send) > 4096:
                  print(f"⚠️ Текст для {gen_id} слишком длинный ({len(text_to_send)} символов). Обрезаем до 4090...")
-                 text_to_send = text_to_send[:4090] + "..." # Обрезаем с запасом
+                 text_to_send = text_to_send[:4090] + "..."
 
             print(f"✈️ Отправляем текстовое сообщение для {gen_id}...")
             await bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
                 text=text_to_send,
-                parse_mode="HTML" # Используем HTML для форматирования (<b>)
+                parse_mode="HTML"
             )
             messages_sent += 1
             print(f"✅ Текстовое сообщение для {gen_id} отправлено.")
 
         # (2) Сарказм
+        # (Ваш код обработки сарказма без изменений)
         sarcasm_comment = data.get("sarcasm", {}).get("comment", "").strip()
         if sarcasm_comment:
-             # Форматируем курсивом
             sarcasm_text = f"📜 <i>{sarcasm_comment}</i>"
-            if len(sarcasm_text) > 4096: # Проверка длины
+            if len(sarcasm_text) > 4096:
                  print(f"⚠️ Текст сарказма для {gen_id} слишком длинный. Обрезаем...")
                  sarcasm_text = sarcasm_text[:4090] + "..."
 
@@ -244,51 +263,47 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             await bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
                 text=sarcasm_text,
-                parse_mode="HTML" # Используем HTML для форматирования (<i>)
+                parse_mode="HTML"
             )
             messages_sent += 1
             print(f"✅ Сарказм для {gen_id} отправлен.")
 
+
         # (3) Опрос
+        # (Ваш код обработки опроса без изменений)
         poll_data = data.get("sarcasm", {}).get("poll", {})
         question = poll_data.get("question", "").strip()
-        options = [str(opt).strip() for opt in poll_data.get("options", []) if str(opt).strip()] # Берем только непустые опции
+        options = [str(opt).strip() for opt in poll_data.get("options", []) if str(opt).strip()]
 
-        # Ограничения Telegram на опросы:
-        # Вопрос: 1-300 символов
-        # Опции: 1-100 символов каждая, от 2 до 10 опций
-        question = question[:300] # Обрезаем вопрос, если длиннее
-        options = [opt[:100] for opt in options][:10] # Обрезаем опции и берем не больше 10
+        question = question[:300]
+        options = [opt[:100] for opt in options][:10]
 
         if question and len(options) >= 2:
-            poll_question = f"🎭 {question}" # Добавляем эмодзи к вопросу
+            poll_question = f"🎭 {question}"
             print(f"✈️ Отправляем опрос для {gen_id}...")
             await bot.send_poll(
                 chat_id=TELEGRAM_CHAT_ID,
                 question=poll_question,
                 options=options,
-                is_anonymous=True # Анонимный опрос
+                is_anonymous=True
             )
             messages_sent += 1
             print(f"✅ Опрос для {gen_id} отправлен.")
         elif question and len(options) < 2:
              print(f"ℹ️ Опрос для {gen_id} имеет вопрос, но меньше 2 валидных опций. Пропускаем.")
-        # Если нет вопроса, ничего не делаем
+
 
         # Перемещаем обработанный JSON-файл, только если что-то было отправлено
         if messages_sent > 0:
-            # Убедимся, что папка processed существует
             os.makedirs(PROCESSED_DIR, exist_ok=True)
             shutil.move(local_json_path, os.path.join(PROCESSED_DIR, os.path.basename(local_json_path)))
             print(f"📁 JSON файл {gen_id}.json перемещён в {PROCESSED_DIR}")
-            # Добавляем gen_id в published_ids ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ОТПРАВКИ
             published_ids.add(gen_id)
-            save_published_ids(published_ids) # Сохраняем обновленный список ID
+            save_published_ids(published_ids) # Вызов вашей функции save_published_ids
             print(f"📝 ID {gen_id} добавлен в список опубликованных.")
             return True
         else:
             print(f"⚠️ Для gen_id={gen_id} не было отправлено ни одного сообщения (возможно, пустой JSON?). Файл не перемещен, ID не добавлен.")
-            # Удаляем локальный JSON, если он не был обработан и перемещен
             if os.path.exists(local_json_path):
                 os.remove(local_json_path)
                 print(f"🗑 Удален необработанный JSON файл: {local_json_path}")
@@ -296,7 +311,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
 
     except json.JSONDecodeError as e:
         print(f"⚠️ Ошибка декодирования JSON файла {local_json_path}: {e}")
-        # Можно переместить поврежденный JSON в отдельную папку для ошибок
         error_dir = os.path.join(DOWNLOAD_DIR, "errors")
         os.makedirs(error_dir, exist_ok=True)
         if os.path.exists(local_json_path):
@@ -306,7 +320,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     except Exception as e:
         print(f"⚠️ Непредвиденная ошибка при обработке JSON или отправке сообщений для {gen_id}: {e}")
         return False
-
 
 # ------------------------------------------------------------
 # 5) Основная логика (поиск и публикация)
