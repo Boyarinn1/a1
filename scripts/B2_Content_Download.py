@@ -345,7 +345,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
 
     # --- Отправка в Telegram ---
     os.makedirs(PROCESSED_DIR, exist_ok=True) # Убедимся, что папка для обработанных существует
-    album_sent = False # Флаг успешной отправки альбома
+    # album_sent определяется ниже, после попытки отправки
     sarcasm_sent = False # Флаг успешной отправки сарказма
     poll_sent = False # Флаг успешной отправки опроса
 
@@ -353,20 +353,36 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     media_items = []
     png_file_handle = None
     video_file_handle = None
+    album_sent = False # Инициализируем флаг перед блоком try
 
     try:
-        # Подготавливаем элементы для медиагруппы
+        # --- Шаг 1: Подготовка списка медиа без подписи ---
         if png_downloaded:
+            # Открываем файл PNG
             png_file_handle = open(local_png_path, "rb")
-            # Добавляем фото. Подпись добавляется только к первому элементу (или к фото, если оно первое)
-            media_items.append(InputMediaPhoto(png_file_handle, caption=caption_text if not media_items else "", parse_mode="HTML"))
+            # Добавляем фото в список БЕЗ подписи на этом этапе
+            media_items.append(InputMediaPhoto(png_file_handle, parse_mode="HTML"))
         if video_downloaded:
+            # Открываем файл видео
             video_file_handle = open(local_video_path, "rb")
-             # Добавляем видео. Добавляем подпись, только если фото не было и это первый элемент
-            media_items.append(InputMediaVideo(video_file_handle, caption=caption_text if not media_items else "", parse_mode="HTML", supports_streaming=True))
+            # Добавляем видео в список БЕЗ подписи на этом этапе
+            media_items.append(InputMediaVideo(video_file_handle, parse_mode="HTML", supports_streaming=True))
 
-        # Отправляем медиагруппу, если есть хотя бы один элемент (PNG или Видео)
-        if media_items:
+        # --- Шаг 2: Добавление подписи к первому элементу (если он есть) ---
+        if media_items and caption_text:
+            # Присваиваем подпись атрибуту 'caption' первого элемента в списке
+            media_items[0].caption = caption_text
+            # Логируем, к какому типу файла добавлена подпись
+            print(f"ℹ️ Подпись будет добавлена к первому элементу: {type(media_items[0]).__name__}")
+        elif not media_items:
+             # Этот блок выполняется, если не скачался ни PNG, ни видео
+             print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Медиагруппа не будет отправлена.")
+             if caption_text:
+                  print(f"   (Текст подписи '{caption_text[:50]}...' не будет отправлен без медиа)")
+             # Не устанавливаем album_sent в True, т.к. отправки не будет
+
+        # --- Шаг 3: Отправка медиагруппы ---
+        if media_items: # Отправляем только если список не пуст
             print(f"✈️ Пытаемся отправить медиагруппу ({'PNG' if png_downloaded else ''}{'+' if png_downloaded and video_downloaded else ''}{'MP4' if video_downloaded else ''}) для {gen_id}...")
             await bot.send_media_group(
                 chat_id=TELEGRAM_CHAT_ID,
@@ -375,24 +391,19 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                 connect_timeout=120,
                 write_timeout=120
             )
-            album_sent = True
+            album_sent = True # Устанавливаем флаг успеха только после успешной отправки
             print(f"✅ Медиагруппа для {gen_id} отправлена.")
-        else:
-            # Сюда попадаем, если не скачался ни PNG, ни Видео
-            print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Медиагруппа не будет отправлена.")
-            # Если был текст подписи, он тоже не будет отправлен, т.к. нет медиа
-            if caption_text:
-                 print(f"   (Текст подписи '{caption_text[:50]}...' не будет отправлен без медиа)")
 
     except Exception as e:
         print(f"❌ Ошибка при отправке медиагруппы для {gen_id}: {e}")
-        # Оставляем album_sent = False
+        album_sent = False # Явно указываем на неуспех в случае ошибки
     finally:
         # Важно: закрываем файловые дескрипторы, даже если была ошибка
         if png_file_handle:
             png_file_handle.close()
         if video_file_handle:
             video_file_handle.close()
+
 
     # 2. Отправляем сарказм, если он есть (независимо от альбома)
     # Проверяем, что JSON был обработан и есть текст сарказма
@@ -436,7 +447,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
 
     # --- Завершение и обработка файлов ---
     # Успех определяется отправкой основного контента - альбома (хотя бы с одним медиа)
-    success = album_sent
+    success = album_sent # Используем флаг, установленный после send_media_group
 
     if success:
         print(f"✅ Успешная публикация основного контента (альбома) для {gen_id}.")
