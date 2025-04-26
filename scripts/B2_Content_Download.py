@@ -6,6 +6,7 @@ import shutil
 import re
 from typing import Set, List, Tuple
 # Импорты для Telegram API
+# Убедимся, что импортируем send_photo и send_video тоже
 from telegram import Bot, InputMediaPhoto, InputMediaVideo
 # Импорты для B2 SDK и обработки ошибок
 import b2sdk.v2
@@ -176,15 +177,16 @@ def remove_system_phrases(text: str) -> str:
     return clean_text.strip()
 
 # ------------------------------------------------------------
-# 4) Публикация одного generation_id (альбом + отдельные сообщения) - ОБНОВЛЕННАЯ ВЕРСЯ
+# 4) Публикация одного generation_id (альбом + отдельные сообщения) - ОБНОВЛЕННАЯ ВЕРСИЯ
 # ------------------------------------------------------------
 async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str]) -> bool:
     """
     Публикует контент для одного generation_id:
-    1. Медиагруппа (PNG + MP4) с подписью из content.текст.
-    2. Отдельное сообщение с сарказмом (из sarcasm.comment.комментарий).
-    3. Отдельное сообщение с опросом (из sarcasm.poll).
-    Возвращает True, если медиагруппа была успешно отправлена, иначе False.
+    - Если есть фото и видео: фото с подписью (send_photo) + видео (send_media_group)
+    - Если есть только фото: фото с подписью (send_photo)
+    - Если есть только видео: видео с подписью (send_video)
+    Затем отправляет сарказм и опрос отдельными сообщениями.
+    Возвращает True, если все основные медиа были успешно отправлены, иначе False.
     """
     print(f"⚙️ Обрабатываем gen_id: {gen_id} из папки {folder}")
     # Формируем ключи (пути) к файлам в B2
@@ -228,7 +230,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         png_downloaded = True
         print(f"✅ PNG скачан: {local_png_path}")
     except FileNotPresent:
-        print(f"ℹ️ PNG файл не найден для {gen_id}. Альбом будет отправлен без него, если есть видео.")
+        print(f"ℹ️ PNG файл не найден для {gen_id}.") # Изменено сообщение
     except B2Error as e:
         print(f"⚠️ Ошибка B2 SDK при скачивании PNG {png_file_key}: {e}")
     except Exception as e:
@@ -242,7 +244,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         video_downloaded = True
         print(f"✅ Видео скачано: {local_video_path}")
     except FileNotPresent:
-        print(f"ℹ️ Видео файл не найден для {gen_id}. Альбом будет отправлен без него, если есть PNG.")
+        print(f"ℹ️ Видео файл не найден для {gen_id}.") # Изменено сообщение
     except B2Error as e:
         print(f"⚠️ Ошибка B2 SDK при скачивании видео {video_file_key}: {e}")
     except Exception as e:
@@ -372,55 +374,114 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     sarcasm_sent = False
     poll_sent = False
-    album_sent = False
+    # Флаги для отслеживания успеха отправки медиа
+    photo_sent = False
+    video_sent = False # Используем video_sent вместо album_sent
 
-    # 1. Отправляем медиагруппу (альбом)
-    media_items = []
-    png_file_handle = None
-    video_file_handle = None
+    # 1. Отправляем основные медиа (фото и/или видео)
+    if not png_downloaded and not video_downloaded:
+        print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Основной контент не будет отправлен.")
+        media_sent_successfully = False # Явно указываем неуспех
+    else:
+        media_sent_successfully = True # Предполагаем успех, пока не докажем обратное
+        # --- Случай 1: Есть и Фото, и Видео (двухшаговая отправка) ---
+        if png_downloaded and video_downloaded:
+            print("ℹ️ Обнаружены и PNG, и Видео. Используем двухшаговую отправку.")
+            # Шаг 1.1: Отправка фото с подписью
+            png_file_handle = None
+            try:
+                print(f"✈️ Шаг 1.1: Отправляем фото {gen_id}.png с подписью...")
+                png_file_handle = open(local_png_path, "rb")
+                await bot.send_photo(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    photo=png_file_handle,
+                    caption=caption_text,
+                    parse_mode="HTML",
+                    read_timeout=120,
+                    connect_timeout=120,
+                    write_timeout=120
+                )
+                photo_sent = True
+                print("✅ Фото отправлено.")
+            except Exception as e:
+                print(f"❌ Ошибка при отправке фото для {gen_id}: {e}")
+                media_sent_successfully = False # Не удалось отправить фото
+            finally:
+                if png_file_handle: png_file_handle.close()
 
-    try:
-        # --- Подготовка списка медиа ---
-        current_caption = caption_text # Используем временную переменную для подписи
+            # Шаг 1.2: Отправка видео без подписи (если фото отправилось успешно)
+            video_file_handle = None
+            if media_sent_successfully: # Продолжаем только если фото ушло
+                try:
+                    print(f"✈️ Шаг 1.2: Отправляем видео {gen_id}.mp4 без подписи...")
+                    video_file_handle = open(local_video_path, "rb")
+                    # Отправляем видео как медиагруппу из одного элемента (без подписи)
+                    # Это может выглядеть чуть иначе, чем просто send_video, но сохраняет логику
+                    await bot.send_media_group(
+                        chat_id=TELEGRAM_CHAT_ID,
+                        media=[InputMediaVideo(video_file_handle, supports_streaming=True)],
+                        read_timeout=120,
+                        connect_timeout=120,
+                        write_timeout=120
+                    )
+                    video_sent = True
+                    print("✅ Видео отправлено.")
+                except Exception as e:
+                    print(f"❌ Ошибка при отправке видео (как группы) для {gen_id}: {e}")
+                    media_sent_successfully = False # Не удалось отправить видео
+                finally:
+                    if video_file_handle: video_file_handle.close()
 
-        if png_downloaded:
-            png_file_handle = open(local_png_path, "rb")
-            media_items.append(InputMediaPhoto(png_file_handle, caption=current_caption, parse_mode="HTML"))
-            current_caption = "" # Очищаем подпись для следующих элементов
-            print(f"ℹ️ Добавлено PNG. Подпись '{caption_text[:30]}...' добавлена (если не пустая).")
-        else:
-            print("ℹ️ PNG не скачан, не будет добавлен в альбом.")
+        # --- Случай 2: Есть только Фото ---
+        elif png_downloaded:
+            print("ℹ️ Обнаружено только PNG. Отправляем через send_photo.")
+            png_file_handle = None
+            try:
+                print(f"✈️ Отправляем фото {gen_id}.png с подписью...")
+                png_file_handle = open(local_png_path, "rb")
+                await bot.send_photo(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    photo=png_file_handle,
+                    caption=caption_text,
+                    parse_mode="HTML",
+                    read_timeout=120,
+                    connect_timeout=120,
+                    write_timeout=120
+                )
+                photo_sent = True
+                video_sent = True # Считаем, что все необходимые медиа (только фото) отправлены
+                print("✅ Фото отправлено.")
+            except Exception as e:
+                print(f"❌ Ошибка при отправке фото для {gen_id}: {e}")
+                media_sent_successfully = False
+            finally:
+                if png_file_handle: png_file_handle.close()
 
-        if video_downloaded:
-            video_file_handle = open(local_video_path, "rb")
-            media_items.append(InputMediaVideo(video_file_handle, caption=current_caption, parse_mode="HTML", supports_streaming=True))
-            print(f"ℹ️ Добавлено MP4. Подпись '{current_caption[:30]}...' добавлена (если PNG не было и подпись не пустая).")
-        else:
-             print("ℹ️ MP4 не скачан, не будет добавлен в альбом.")
-
-        # --- Отправка медиагруппы ---
-        if media_items:
-            print(f"✈️ Пытаемся отправить медиагруппу ({len(media_items)} элемент(а)) для {gen_id}...")
-            await bot.send_media_group(
-                chat_id=TELEGRAM_CHAT_ID,
-                media=media_items,
-                read_timeout=120,
-                connect_timeout=120,
-                write_timeout=120
-            )
-            album_sent = True
-            print(f"✅ Медиагруппа для {gen_id} отправлена.")
-        else:
-             print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Медиагруппа не будет отправлена.")
-             if caption_text:
-                  print(f"   (Текст подписи '{caption_text[:50]}...' не будет отправлен без медиа)")
-
-    except Exception as e:
-        print(f"❌ Ошибка при отправке медиагруппы для {gen_id}: {e}")
-        album_sent = False
-    finally:
-        if png_file_handle: png_file_handle.close()
-        if video_file_handle: video_file_handle.close()
+        # --- Случай 3: Есть только Видео ---
+        elif video_downloaded:
+            print("ℹ️ Обнаружено только Видео. Отправляем через send_video.")
+            video_file_handle = None
+            try:
+                print(f"✈️ Отправляем видео {gen_id}.mp4 с подписью...")
+                video_file_handle = open(local_video_path, "rb")
+                await bot.send_video(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    video=video_file_handle,
+                    caption=caption_text,
+                    parse_mode="HTML",
+                    supports_streaming=True,
+                    read_timeout=120,
+                    connect_timeout=120,
+                    write_timeout=120
+                )
+                photo_sent = True # Считаем, что все необходимые медиа (только видео) отправлены
+                video_sent = True
+                print("✅ Видео отправлено.")
+            except Exception as e:
+                print(f"❌ Ошибка при отправке видео для {gen_id}: {e}")
+                media_sent_successfully = False
+            finally:
+                if video_file_handle: video_file_handle.close()
 
     # 2. Отправляем сарказм, если он есть
     print(f"DEBUG: Проверка перед отправкой сарказма: json_processed_successfully={json_processed_successfully}, sarcasm_comment='{sarcasm_comment}'")
@@ -470,10 +531,11 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
          print("DEBUG: Условие для отправки опроса не выполнено (json_processed_successfully is False).")
 
     # --- Завершение и обработка файлов ---
-    success = album_sent
+    # Успех определяется отправкой ВСЕХ основных медиа (фото и/или видео)
+    success = media_sent_successfully
 
     if success:
-        print(f"✅ Успешная публикация основного контента (альбома) для {gen_id}.")
+        print(f"✅ Успешная публикация основного контента (медиа) для {gen_id}.")
         published_ids.add(gen_id)
         save_published_ids(published_ids)
 
@@ -487,10 +549,14 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                 except Exception as e:
                     print(f"  ⚠️ Не удалось переместить файл {os.path.basename(file_path)} в processed: {e}")
     else:
-        if json_processed_successfully:
-             print(f"⚠️ Основной контент (альбом) для {gen_id} не был отправлен. ID не добавлен в опубликованные.")
-             print(f"   (Статус отправки: Сарказм - {'Да' if sarcasm_sent else 'Нет'}, Опрос - {'Да' if poll_sent else 'Нет'})")
+        # Если основные медиа не были отправлены
+        if json_processed_successfully: # Но JSON был обработан
+             print(f"⚠️ Основной контент (медиа) для {gen_id} не был отправлен. ID не добавлен в опубликованные.")
+             print(f"   (Статус отправки: Фото - {'Да' if photo_sent else 'Нет'}, Видео - {'Да' if video_sent else 'Нет'}, Сарказм - {'Да' if sarcasm_sent else 'Нет'}, Опрос - {'Да' if poll_sent else 'Нет'})") # <-- Добавлен статус фото/видео
              print(f"   🗑️ Удаляем локальные файлы для {gen_id}, чтобы избежать дублирования при след. запуске.")
+        # else: # Если была ошибка обработки JSON, файлы уже удалены или перемещены в errors
+
+        # Удаляем все локальные файлы (JSON, PNG, Video), которые могли остаться в download
         files_to_delete = [local_png_path, local_video_path, local_json_path]
         for file_path in files_to_delete:
              if os.path.exists(file_path) and PROCESSED_DIR not in os.path.dirname(file_path) and ERROR_DIR not in os.path.dirname(file_path):
@@ -509,7 +575,7 @@ async def main():
     Главная асинхронная функция скрипта.
     """
     print("\n" + "="*50)
-    print("🚀 Запуск скрипта публикации B2 -> Telegram (v2: Альбом)")
+    print("🚀 Запуск скрипта публикации B2 -> Telegram (v2: Альбом / Двухшаговая отправка)") # <-- Обновлено название
     print("="*50)
 
     print("🧹 Очищаем/создаем локальные папки для скачивания и обработки...")
@@ -589,4 +655,3 @@ if __name__ == "__main__":
         print(f"\n💥 Критическая ошибка: {e}")
     except Exception as e:
          print(f"\n💥 Непредвиденная критическая ошибка: {e}")
-
