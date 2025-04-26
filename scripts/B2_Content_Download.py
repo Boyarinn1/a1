@@ -176,7 +176,7 @@ def remove_system_phrases(text: str) -> str:
     return clean_text.strip()
 
 # ------------------------------------------------------------
-# 4) Публикация одного generation_id (альбом + отдельные сообщения) - ОБНОВЛЕННАЯ ВЕРСИЯ
+# 4) Публикация одного generation_id (альбом + отдельные сообщения) - ОБНОВЛЕННАЯ ВЕРСЯ
 # ------------------------------------------------------------
 async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str]) -> bool:
     """
@@ -519,7 +519,8 @@ async def main():
             # Получаем список файлов в папке (рекурсивно, если нужно)
             # `recursive=False` - ищем только в корне папки folder
             # `recursive=True` - ищем в folder и всех ее подпапках
-            ls_result = bucket.ls(folder_to_list=folder, recursive=False, show_versions=False) # show_versions=False - не показывать старые версии файлов
+            # ИСПРАВЛЕНО: Убран аргумент show_versions
+            ls_result = bucket.ls(folder_to_list=folder, recursive=False)
 
             gen_ids_in_folder = set() # Множество для хранения уникальных ID в этой папке
             # Обрабатываем результат листинга
@@ -530,6 +531,8 @@ async def main():
                 if file_name.startswith(folder) and file_name.endswith(".json"):
                      # Проверяем, что файл находится именно в этой папке, а не в подпапке (если recursive=False)
                      # Пример: для папки '444/', файл '444/subdir/file.json' будет проигнорирован
+                     # Условие `os.path.dirname(...) == ''` проверяет, что после удаления префикса папки
+                     # в пути не остается имени поддиректории.
                      if os.path.dirname(file_name.replace(folder, '', 1)) == '':
                          # Извлекаем имя файла без пути и расширения - это и есть gen_id
                          base_name = os.path.basename(file_name)
