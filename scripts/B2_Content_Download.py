@@ -282,11 +282,11 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             print(f"ℹ️ Поле 'content' пустое или отсутствует в JSON для {gen_id}.")
 
         # Отладочный вывод ДО очистки
-        print(f"DEBUG: Извлеченный caption_text (до очистки): '{caption_text}'") # <-- Добавлено
+        # print(f"DEBUG: Извлеченный caption_text (до очистки): '{caption_text}'") # Убрано
         # Очищаем текст подписи от системных фраз ("Вступление:" и т.д.)
         caption_text = remove_system_phrases(caption_text)
         # Отладочный вывод ПОСЛЕ очистки
-        print(f"DEBUG: Очищенный caption_text (до обрезки): '{caption_text}'") # <-- Добавлено
+        print(f"DEBUG: Очищенный caption_text (до обрезки): '{caption_text}'")
 
         # Обрезаем подпись до 1024 символов (лимит Telegram для медиагрупп)
         if len(caption_text) > 1024:
@@ -313,7 +313,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                   print(f"⚠️ Неожиданная ошибка при обработке 'sarcasm.comment' для {gen_id}: {e}")
                   sarcasm_comment = ""
         # Отладочный вывод для сарказма
-        print(f"DEBUG: Извлеченный sarcasm_comment: '{sarcasm_comment}'") # <-- Добавлено
+        print(f"DEBUG: Извлеченный sarcasm_comment: '{sarcasm_comment}'")
 
         # Извлекаем данные для опроса из поля "sarcasm.poll"
         poll_data = data.get("sarcasm", {}).get("poll", {})
@@ -326,12 +326,12 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         poll_options = [opt[:100] for opt in poll_options][:10] # Не более 10 опций
 
         # Отладочный вывод для опроса
-        print(f"DEBUG: Извлеченный poll_question: '{poll_question}'") # <-- Добавлено
-        print(f"DEBUG: Извлеченные poll_options: {poll_options}") # <-- Добавлено
+        print(f"DEBUG: Извлеченный poll_question: '{poll_question}'")
+        print(f"DEBUG: Извлеченные poll_options: {poll_options}")
 
         # Если дошли до сюда без ошибок, считаем обработку JSON успешной
         json_processed_successfully = True
-        print(f"DEBUG: json_processed_successfully установлен в True") # <-- Добавлено
+        print(f"DEBUG: json_processed_successfully установлен в True")
 
     except json.JSONDecodeError as e:
         # Ошибка при чтении основного JSON файла
@@ -369,36 +369,35 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     album_sent = False # Инициализируем флаг перед блоком try
 
     try:
-        # --- Шаг 1: Подготовка списка медиа без подписи ---
+        # --- Подготовка списка медиа ---
+        current_caption = caption_text # Используем временную переменную для подписи
+
         if png_downloaded:
             # Открываем файл PNG
             png_file_handle = open(local_png_path, "rb")
-            # Добавляем фото в список БЕЗ подписи на этом этапе
-            media_items.append(InputMediaPhoto(png_file_handle, parse_mode="HTML"))
+            # Добавляем фото. Если это первый элемент, добавляем подпись.
+            media_items.append(InputMediaPhoto(png_file_handle, caption=current_caption, parse_mode="HTML"))
+            # После добавления первого элемента, очищаем подпись для следующих
+            current_caption = ""
+            print(f"ℹ️ Добавлено PNG. Подпись '{caption_text[:30]}...' добавлена (если не пустая).")
+        else:
+            print("ℹ️ PNG не скачан, не будет добавлен в альбом.")
+
         if video_downloaded:
             # Открываем файл видео
             video_file_handle = open(local_video_path, "rb")
-            # Добавляем видео в список БЕЗ подписи на этом этапе
-            media_items.append(InputMediaVideo(video_file_handle, parse_mode="HTML", supports_streaming=True))
+            # Добавляем видео. Если фото не было (media_items пуст) И это первый элемент,
+            # добавляем подпись (которая все еще в current_caption).
+            # Если фото уже было добавлено, current_caption будет пустой.
+            media_items.append(InputMediaVideo(video_file_handle, caption=current_caption, parse_mode="HTML", supports_streaming=True))
+            print(f"ℹ️ Добавлено MP4. Подпись '{current_caption[:30]}...' добавлена (если PNG не было и подпись не пустая).")
+        else:
+             print("ℹ️ MP4 не скачан, не будет добавлен в альбом.")
 
-        # --- Шаг 2: Добавление подписи к первому элементу (если он есть) ---
-        if media_items and caption_text:
-            # Присваиваем подпись атрибуту 'caption' первого элемента в списке
-            media_items[0].caption = caption_text
-            # Логируем, к какому типу файла добавлена подпись
-            print(f"ℹ️ Подпись '{caption_text[:30]}...' будет добавлена к первому элементу: {type(media_items[0]).__name__}") # <-- Изменено (добавлен текст подписи)
-        elif media_items and not caption_text:
-             print(f"ℹ️ Первый элемент ({type(media_items[0]).__name__}) есть, но caption_text пуст. Подпись не будет добавлена.") # <-- Добавлено
-        elif not media_items:
-             # Этот блок выполняется, если не скачался ни PNG, ни видео
-             print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Медиагруппа не будет отправлена.")
-             if caption_text:
-                  print(f"   (Текст подписи '{caption_text[:50]}...' не будет отправлен без медиа)")
-             # Не устанавливаем album_sent в True, т.к. отправки не будет
 
-        # --- Шаг 3: Отправка медиагруппы ---
+        # --- Отправка медиагруппы ---
         if media_items: # Отправляем только если список не пуст
-            print(f"✈️ Пытаемся отправить медиагруппу ({'PNG' if png_downloaded else ''}{'+' if png_downloaded and video_downloaded else ''}{'MP4' if video_downloaded else ''}) для {gen_id}...")
+            print(f"✈️ Пытаемся отправить медиагруппу ({len(media_items)} элемент(а)) для {gen_id}...")
             await bot.send_media_group(
                 chat_id=TELEGRAM_CHAT_ID,
                 media=media_items,
@@ -408,6 +407,11 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             )
             album_sent = True # Устанавливаем флаг успеха только после успешной отправки
             print(f"✅ Медиагруппа для {gen_id} отправлена.")
+        else:
+             # Этот блок выполняется, если не скачался ни PNG, ни видео
+             print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Медиагруппа не будет отправлена.")
+             if caption_text:
+                  print(f"   (Текст подписи '{caption_text[:50]}...' не будет отправлен без медиа)")
 
     except Exception as e:
         print(f"❌ Ошибка при отправке медиагруппы для {gen_id}: {e}")
@@ -422,7 +426,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
 
     # 2. Отправляем сарказм, если он есть (независимо от альбома)
     # Отладочный вывод перед проверкой условия
-    print(f"DEBUG: Проверка перед отправкой сарказма: json_processed_successfully={json_processed_successfully}, sarcasm_comment='{sarcasm_comment}'") # <-- Добавлено
+    print(f"DEBUG: Проверка перед отправкой сарказма: json_processed_successfully={json_processed_successfully}, sarcasm_comment='{sarcasm_comment}'")
     # Проверяем, что JSON был обработан и есть текст сарказма
     if json_processed_successfully and sarcasm_comment:
         sarcasm_text_formatted = f"📜 <i>{sarcasm_comment}</i>" # Форматируем курсивом
@@ -443,14 +447,14 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             print(f"⚠️ Ошибка при отправке сарказма для {gen_id}: {e}")
     # Добавляем блок else для отладки, если условие не выполнено
     elif json_processed_successfully and not sarcasm_comment:
-        print("DEBUG: Условие для отправки сарказма не выполнено (sarcasm_comment пуст).") # <-- Добавлено
+        print("DEBUG: Условие для отправки сарказма не выполнено (sarcasm_comment пуст).")
     elif not json_processed_successfully:
-        print("DEBUG: Условие для отправки сарказма не выполнено (json_processed_successfully is False).") # <-- Добавлено
+        print("DEBUG: Условие для отправки сарказма не выполнено (json_processed_successfully is False).")
 
 
     # 3. Отправляем опрос, если он валиден (независимо от альбома)
     # Отладочный вывод перед проверкой условия
-    print(f"DEBUG: Проверка перед отправкой опроса: json_processed_successfully={json_processed_successfully}, poll_question='{poll_question}', len(poll_options)={len(poll_options)}") # <-- Добавлено
+    print(f"DEBUG: Проверка перед отправкой опроса: json_processed_successfully={json_processed_successfully}, poll_question='{poll_question}', len(poll_options)={len(poll_options)}")
     # Проверяем, что JSON обработан, есть вопрос и минимум 2 опции
     if json_processed_successfully and poll_question and len(poll_options) >= 2:
         poll_question_formatted = f"🎭 {poll_question}" # Добавляем эмодзи к вопросу
@@ -469,11 +473,11 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     # Добавляем блок else для отладки
     elif json_processed_successfully:
          if not poll_question:
-              print("DEBUG: Условие для отправки опроса не выполнено (poll_question пуст).") # <-- Добавлено
+              print("DEBUG: Условие для отправки опроса не выполнено (poll_question пуст).")
          elif len(poll_options) < 2:
-              print(f"DEBUG: Условие для отправки опроса не выполнено (опций: {len(poll_options)} < 2).") # <-- Добавлено
+              print(f"DEBUG: Условие для отправки опроса не выполнено (опций: {len(poll_options)} < 2).")
     elif not json_processed_successfully:
-         print("DEBUG: Условие для отправки опроса не выполнено (json_processed_successfully is False).") # <-- Добавлено
+         print("DEBUG: Условие для отправки опроса не выполнено (json_processed_successfully is False).")
 
 
     # --- Завершение и обработка файлов ---
