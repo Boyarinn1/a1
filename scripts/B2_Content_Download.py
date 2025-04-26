@@ -253,7 +253,8 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     sarcasm_comment = "" # Текст сарказма
     poll_question = "" # Вопрос для опроса
     poll_options = [] # Варианты ответа для опроса
-    json_processed_successfully = False # Флаг успешной обработки JSON
+    # Инициализируем флаг как False. Он станет True только после успешного блока try
+    json_processed_successfully = False
 
     try:
         # Открываем скачанный JSON
@@ -280,8 +281,12 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         else:
             print(f"ℹ️ Поле 'content' пустое или отсутствует в JSON для {gen_id}.")
 
+        # Отладочный вывод ДО очистки
+        print(f"DEBUG: Извлеченный caption_text (до очистки): '{caption_text}'") # <-- Добавлено
         # Очищаем текст подписи от системных фраз ("Вступление:" и т.д.)
         caption_text = remove_system_phrases(caption_text)
+        # Отладочный вывод ПОСЛЕ очистки
+        print(f"DEBUG: Очищенный caption_text (до обрезки): '{caption_text}'") # <-- Добавлено
 
         # Обрезаем подпись до 1024 символов (лимит Telegram для медиагрупп)
         if len(caption_text) > 1024:
@@ -307,6 +312,8 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
              except Exception as e:
                   print(f"⚠️ Неожиданная ошибка при обработке 'sarcasm.comment' для {gen_id}: {e}")
                   sarcasm_comment = ""
+        # Отладочный вывод для сарказма
+        print(f"DEBUG: Извлеченный sarcasm_comment: '{sarcasm_comment}'") # <-- Добавлено
 
         # Извлекаем данные для опроса из поля "sarcasm.poll"
         poll_data = data.get("sarcasm", {}).get("poll", {})
@@ -318,7 +325,13 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         poll_question = poll_question[:300]
         poll_options = [opt[:100] for opt in poll_options][:10] # Не более 10 опций
 
-        json_processed_successfully = True # JSON успешно обработан
+        # Отладочный вывод для опроса
+        print(f"DEBUG: Извлеченный poll_question: '{poll_question}'") # <-- Добавлено
+        print(f"DEBUG: Извлеченные poll_options: {poll_options}") # <-- Добавлено
+
+        # Если дошли до сюда без ошибок, считаем обработку JSON успешной
+        json_processed_successfully = True
+        print(f"DEBUG: json_processed_successfully установлен в True") # <-- Добавлено
 
     except json.JSONDecodeError as e:
         # Ошибка при чтении основного JSON файла
@@ -373,7 +386,9 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             # Присваиваем подпись атрибуту 'caption' первого элемента в списке
             media_items[0].caption = caption_text
             # Логируем, к какому типу файла добавлена подпись
-            print(f"ℹ️ Подпись будет добавлена к первому элементу: {type(media_items[0]).__name__}")
+            print(f"ℹ️ Подпись '{caption_text[:30]}...' будет добавлена к первому элементу: {type(media_items[0]).__name__}") # <-- Изменено (добавлен текст подписи)
+        elif media_items and not caption_text:
+             print(f"ℹ️ Первый элемент ({type(media_items[0]).__name__}) есть, но caption_text пуст. Подпись не будет добавлена.") # <-- Добавлено
         elif not media_items:
              # Этот блок выполняется, если не скачался ни PNG, ни видео
              print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Медиагруппа не будет отправлена.")
@@ -406,6 +421,8 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
 
 
     # 2. Отправляем сарказм, если он есть (независимо от альбома)
+    # Отладочный вывод перед проверкой условия
+    print(f"DEBUG: Проверка перед отправкой сарказма: json_processed_successfully={json_processed_successfully}, sarcasm_comment='{sarcasm_comment}'") # <-- Добавлено
     # Проверяем, что JSON был обработан и есть текст сарказма
     if json_processed_successfully and sarcasm_comment:
         sarcasm_text_formatted = f"📜 <i>{sarcasm_comment}</i>" # Форматируем курсивом
@@ -424,8 +441,16 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             print(f"✅ Сарказм для {gen_id} отправлен.")
         except Exception as e:
             print(f"⚠️ Ошибка при отправке сарказма для {gen_id}: {e}")
+    # Добавляем блок else для отладки, если условие не выполнено
+    elif json_processed_successfully and not sarcasm_comment:
+        print("DEBUG: Условие для отправки сарказма не выполнено (sarcasm_comment пуст).") # <-- Добавлено
+    elif not json_processed_successfully:
+        print("DEBUG: Условие для отправки сарказма не выполнено (json_processed_successfully is False).") # <-- Добавлено
+
 
     # 3. Отправляем опрос, если он валиден (независимо от альбома)
+    # Отладочный вывод перед проверкой условия
+    print(f"DEBUG: Проверка перед отправкой опроса: json_processed_successfully={json_processed_successfully}, poll_question='{poll_question}', len(poll_options)={len(poll_options)}") # <-- Добавлено
     # Проверяем, что JSON обработан, есть вопрос и минимум 2 опции
     if json_processed_successfully and poll_question and len(poll_options) >= 2:
         poll_question_formatted = f"🎭 {poll_question}" # Добавляем эмодзи к вопросу
@@ -441,9 +466,15 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             print(f"✅ Опрос для {gen_id} отправлен.")
         except Exception as e:
             print(f"⚠️ Ошибка при отправке опроса для {gen_id}: {e}")
-    elif json_processed_successfully and poll_question and len(poll_options) < 2:
-        # Если вопрос есть, а опций мало
-        print(f"ℹ️ Опрос для {gen_id} имеет вопрос '{poll_question[:50]}...', но меньше 2 валидных опций. Пропускаем.")
+    # Добавляем блок else для отладки
+    elif json_processed_successfully:
+         if not poll_question:
+              print("DEBUG: Условие для отправки опроса не выполнено (poll_question пуст).") # <-- Добавлено
+         elif len(poll_options) < 2:
+              print(f"DEBUG: Условие для отправки опроса не выполнено (опций: {len(poll_options)} < 2).") # <-- Добавлено
+    elif not json_processed_successfully:
+         print("DEBUG: Условие для отправки опроса не выполнено (json_processed_successfully is False).") # <-- Добавлено
+
 
     # --- Завершение и обработка файлов ---
     # Успех определяется отправкой основного контента - альбома (хотя бы с одним медиа)
@@ -554,7 +585,7 @@ async def main():
                          else:
                               print(f"   ⚠️ Пропускаем файл с некорректным именем ID: {file_name}")
 
-            print(f"   ℹ️ Найдено {len(gen_ids_in_folder)} уникальных ID формата YYYYMMDD-HHMM в {folder}")
+            print(f"   ℹ️ Найдено {len(gen_ids_in_folder)} уникальных ID формата YYYYMMDD-HHMM в {folder}") # <-- Исправлен формат в логе
 
             # Отбираем только те ID из этой папки, которых нет в списке опубликованных
             new_ids = gen_ids_in_folder - published_ids
