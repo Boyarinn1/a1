@@ -4,7 +4,7 @@ import json
 import asyncio
 import shutil
 import re
-from typing import Set, List, Tuple
+from typing import Set, List, Tuple, Any # Добавлен Any
 # Импорты для Telegram API
 from telegram import Bot, InputMediaPhoto, InputMediaVideo
 # Импорты для B2 SDK и обработки ошибок
@@ -216,10 +216,9 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         print(f"✅ JSON скачан: {local_json_path}")
     except FileNotPresent:
         print(f"❌ Группа {gen_id} неполная (отсутствует JSON). Публикация пропускается.")
-        # Удаляем другие скачанные файлы, если они есть
         if os.path.exists(local_png_path): os.remove(local_png_path)
         if os.path.exists(local_video_path): os.remove(local_video_path)
-        return False # Без JSON продолжать нет смысла
+        return False
     except B2Error as e:
         print(f"⚠️ Ошибка B2 SDK при скачивании JSON {json_file_key}: {e}")
         if os.path.exists(local_png_path): os.remove(local_png_path)
@@ -262,7 +261,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     # --- ПРОВЕРКА НА ПОЛНОТУ ГРУППЫ (PNG и VIDEO) ---
     if not (png_downloaded and video_downloaded):
         print(f"❌ Группа {gen_id} неполная (PNG: {png_downloaded}, Видео: {video_downloaded}). Публикация пропускается ПОЛНОСТЬЮ.")
-        # Удаляем скачанные файлы, чтобы не мешались
         files_to_delete = [local_png_path, local_video_path, local_json_path]
         for file_path in files_to_delete:
             if os.path.exists(file_path):
@@ -288,31 +286,21 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         with open(local_json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # --- ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ (с проверкой ключей "текст" и "content") ---
-        content_value = data.get("content") # Получаем значение поля content
-        possible_text_keys = ["текст", "content"] # Ключи для поиска текста
+        # --- ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ (УЛУЧШЕНО: "текст", "content", "post") ---
+        content_value = data.get("content")
+        possible_text_keys = ["текст", "content"]
         found_text = None
+        content_data = None # Переменная для распарсенного content
 
         if isinstance(content_value, dict):
             # Если content - это уже словарь
-            for key in possible_text_keys:
-                if key in content_value:
-                    found_text = content_value[key]
-                    break
-            if found_text is None:
-                 print(f"⚠️ Ни один из ключей {possible_text_keys} не найден в объекте 'content' ({gen_id}).")
+            content_data = content_value
         elif isinstance(content_value, str) and content_value.strip():
             # Если content - это непустая строка
             raw_content_str = content_value.strip()
             try:
                 # Пытаемся распарсить строку как JSON
                 content_data = json.loads(raw_content_str)
-                for key in possible_text_keys:
-                     if key in content_data:
-                          found_text = content_data[key]
-                          break
-                if found_text is None:
-                     print(f"⚠️ Ни один из ключей {possible_text_keys} не найден во вложенном JSON поля 'content' ({gen_id}).")
             except json.JSONDecodeError:
                 # Если не JSON, но строка не пустая и не похожа на пустой объект, используем как есть
                 if raw_content_str not in ["{}"]:
@@ -326,8 +314,31 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             # Если поле content отсутствует, пустое или имеет другой тип
             print(f"ℹ️ Поле 'content' пустое, отсутствует или имеет неожиданный тип в JSON для {gen_id}.")
 
+        # Если удалось распарсить content_data или content_value был словарем
+        if content_data is not None:
+            # 1. Ищем структуру "post": [ {"key": "value"}, ... ]
+            post_list = content_data.get("post")
+            if isinstance(post_list, list):
+                post_texts = []
+                for item in post_list:
+                    if isinstance(item, dict) and len(item) == 1:
+                        # Берем значение из единственного ключа в словаре
+                        post_texts.append(list(item.values())[0])
+                if post_texts:
+                    found_text = "\n\n".join(filter(None, post_texts)) # Объединяем через двойной перенос строки
+                    print(f"ℹ️ Текст извлечен из структуры 'post' для {gen_id}.")
+
+            # 2. Если "post" не найдено или пусто, ищем ключи "текст" или "content"
+            if found_text is None:
+                for key in possible_text_keys:
+                    if key in content_data:
+                        found_text = content_data[key]
+                        break
+                if found_text is None:
+                     print(f"⚠️ Ни один из ключей {possible_text_keys} или структура 'post' не найдены в 'content' ({gen_id}).")
+
         # Присваиваем найденный текст (или пустую строку)
-        caption_text = found_text.strip() if found_text else ""
+        caption_text = found_text.strip() if isinstance(found_text, str) else "" # Добавлена проверка типа
         caption_text = remove_system_phrases(caption_text)
         print(f"DEBUG: Очищенный caption_text (для видео): '{caption_text}'")
 
@@ -340,24 +351,14 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         comment_value = sarcasm_data.get("comment")
         possible_comment_keys = ["комментарий", "sarcastic_comment"] # Ключи для поиска сарказма
         found_comment = None
+        comment_data_parsed = None # Для распарсенного comment
 
         if isinstance(comment_value, dict):
-            for key in possible_comment_keys:
-                if key in comment_value:
-                    found_comment = comment_value[key]
-                    break
-            if found_comment is None:
-                print(f"⚠️ Ни один из ключей {possible_comment_keys} не найден в объекте 'sarcasm.comment' ({gen_id}).")
+             comment_data_parsed = comment_value
         elif isinstance(comment_value, str) and comment_value.strip():
             raw_comment_str = comment_value.strip()
             try:
-                comment_data = json.loads(raw_comment_str)
-                for key in possible_comment_keys:
-                    if key in comment_data:
-                        found_comment = comment_data[key]
-                        break
-                if found_comment is None:
-                    print(f"⚠️ Ни один из ключей {possible_comment_keys} не найден во вложенном JSON поля 'sarcasm.comment' ({gen_id}).")
+                comment_data_parsed = json.loads(raw_comment_str)
             except json.JSONDecodeError:
                  if raw_comment_str not in ["{}"]:
                       print(f"ℹ️ Поле 'sarcasm.comment' для {gen_id} не является валидным JSON, но содержит текст. Используем как есть.")
@@ -369,7 +370,15 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         else:
              print(f"ℹ️ Поле 'sarcasm.comment' пустое, отсутствует или имеет неожиданный тип в JSON для {gen_id}.")
 
-        sarcasm_comment = found_comment.strip() if found_comment else ""
+        if comment_data_parsed is not None:
+             for key in possible_comment_keys:
+                 if key in comment_data_parsed:
+                     found_comment = comment_data_parsed[key]
+                     break
+             if found_comment is None:
+                  print(f"⚠️ Ни один из ключей {possible_comment_keys} не найден в 'sarcasm.comment' ({gen_id}).")
+
+        sarcasm_comment = found_comment.strip() if isinstance(found_comment, str) else "" # Добавлена проверка типа
         print(f"DEBUG: Извлеченный sarcasm_comment: '{sarcasm_comment}'")
 
         # --- Извлечение опроса (без изменений) ---
@@ -529,7 +538,7 @@ async def main():
     Останавливается после первой успешной публикации.
     """
     print("\n" + "="*50)
-    print("🚀 Запуск скрипта публикации B2 -> Telegram (v9: Гибкое извлечение текста)") # <-- Обновлено название
+    print("🚀 Запуск скрипта публикации B2 -> Telegram (v10: Обработка структуры 'post')") # <-- Обновлено название
     print("="*50)
 
     print("🧹 Очищаем/создаем локальные папки для скачивания и обработки...")
@@ -562,7 +571,7 @@ async def main():
                          else:
                               print(f"   ⚠️ Пропускаем файл с некорректным именем ID: {file_name}")
 
-            print(f"   ℹ️ Найдено {len(gen_ids_in_folder)} уникальных ID формата YYYYMMDD-HHMM в {folder}")
+            print(f"   ℹ️ Найдено {len(gen_ids_in_folder)} уникальных ID формата AbschlussMMDD-HHMM в {folder}")
 
             new_ids = gen_ids_in_folder - published_ids
             if new_ids:
