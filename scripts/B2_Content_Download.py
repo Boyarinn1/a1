@@ -177,16 +177,16 @@ def remove_system_phrases(text: str) -> str:
     return clean_text.strip()
 
 # ------------------------------------------------------------
-# 4) Публикация одного generation_id (альбом + отдельные сообщения) - ОБНОВЛЕННАЯ ВЕРСИЯ
+# 4) Публикация одного generation_id (Фото + Видео отдельно) - ОБНОВЛЕННАЯ ВЕРСИЯ
 # ------------------------------------------------------------
 async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str]) -> bool:
     """
     Публикует контент для одного generation_id:
-    - Если есть фото и видео: фото с подписью (send_photo) + видео (send_media_group)
-    - Если есть только фото: фото с подписью (send_photo)
-    - Если есть только видео: видео с подписью (send_video)
-    Затем отправляет сарказм и опрос отдельными сообщениями.
-    Возвращает True, если все основные медиа были успешно отправлены, иначе False.
+    1. Фото (PNG) без подписи (если есть).
+    2. Видео (MP4) с подписью (caption_text) (если есть).
+    3. Отдельное сообщение с сарказмом.
+    4. Отдельное сообщение с опросом.
+    Возвращает True, если все существующие медиа (фото/видео) были успешно отправлены.
     """
     print(f"⚙️ Обрабатываем gen_id: {gen_id} из папки {folder}")
     # Формируем ключи (пути) к файлам в B2
@@ -222,7 +222,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         print(f"⚠️ Неожиданная ошибка при скачивании JSON {json_file_key}: {e}")
         return False
 
-    # 2. Пытаемся скачать PNG (необязательно, но нужно для альбома)
+    # 2. Пытаемся скачать PNG
     try:
         print(f"📥 Пытаемся скачать PNG: {png_file_key} -> {local_png_path}")
         os.makedirs(os.path.dirname(local_png_path), exist_ok=True)
@@ -230,13 +230,13 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         png_downloaded = True
         print(f"✅ PNG скачан: {local_png_path}")
     except FileNotPresent:
-        print(f"ℹ️ PNG файл не найден для {gen_id}.") # Изменено сообщение
+        print(f"ℹ️ PNG файл не найден для {gen_id}.")
     except B2Error as e:
         print(f"⚠️ Ошибка B2 SDK при скачивании PNG {png_file_key}: {e}")
     except Exception as e:
         print(f"⚠️ Неожиданная ошибка при скачивании PNG {png_file_key}: {e}")
 
-    # 3. Пытаемся скачать видео (необязательно, но нужно для альбома)
+    # 3. Пытаемся скачать видео
     try:
         print(f"📥 Пытаемся скачать видео: {video_file_key} -> {local_video_path}")
         os.makedirs(os.path.dirname(local_video_path), exist_ok=True)
@@ -244,14 +244,14 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         video_downloaded = True
         print(f"✅ Видео скачано: {local_video_path}")
     except FileNotPresent:
-        print(f"ℹ️ Видео файл не найден для {gen_id}.") # Изменено сообщение
+        print(f"ℹ️ Видео файл не найден для {gen_id}.")
     except B2Error as e:
         print(f"⚠️ Ошибка B2 SDK при скачивании видео {video_file_key}: {e}")
     except Exception as e:
         print(f"⚠️ Неожиданная ошибка при скачивании видео {video_file_key}: {e}")
 
     # --- Обработка JSON и подготовка контента ---
-    caption_text = "" # Текст для подписи к альбому
+    caption_text = "" # Текст для подписи к ВИДЕО
     sarcasm_comment = "" # Текст сарказма
     poll_question = "" # Вопрос для опроса
     poll_options = [] # Варианты ответа для опроса
@@ -263,24 +263,18 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         with open(local_json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # --- УЛУЧШЕННОЕ ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ ---
+        # --- УЛУЧШЕННОЕ ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ (для видео) ---
         content_value = data.get("content") # Получаем значение поля content
         if isinstance(content_value, dict):
-            # Если content - это уже словарь (JSON объект)
             caption_text = content_value.get("текст", "").strip()
-            if not caption_text:
-                print(f"⚠️ Ключ 'текст' отсутствует или пуст в объекте 'content' ({gen_id}).")
+            if not caption_text: print(f"⚠️ Ключ 'текст' отсутствует или пуст в объекте 'content' ({gen_id}).")
         elif isinstance(content_value, str) and content_value.strip():
-            # Если content - это непустая строка
             raw_content_str = content_value.strip()
             try:
-                # Пытаемся распарсить строку как JSON
                 content_data = json.loads(raw_content_str)
                 caption_text = content_data.get("текст", "").strip()
-                if not caption_text:
-                     print(f"⚠️ Ключ 'текст' отсутствует или пуст во вложенном JSON поля 'content' ({gen_id}).")
+                if not caption_text: print(f"⚠️ Ключ 'текст' отсутствует или пуст во вложенном JSON поля 'content' ({gen_id}).")
             except json.JSONDecodeError:
-                # Если не JSON, но строка не пустая и не похожа на пустой объект, используем как есть
                 if raw_content_str not in ["{}"]:
                      print(f"ℹ️ Поле 'content' для {gen_id} не является валидным JSON, но содержит текст. Используем как есть.")
                      caption_text = raw_content_str
@@ -291,37 +285,29 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                  print(f"⚠️ Неожиданная ошибка при обработке поля 'content' для {gen_id}: {e}")
                  caption_text = ""
         else:
-            # Если поле content отсутствует, пустое или имеет другой тип
             print(f"ℹ️ Поле 'content' пустое, отсутствует или имеет неожиданный тип в JSON для {gen_id}.")
 
-        # Очищаем текст подписи от системных фраз ("Вступление:" и т.д.)
         caption_text = remove_system_phrases(caption_text)
-        print(f"DEBUG: Очищенный caption_text (до обрезки): '{caption_text}'")
+        print(f"DEBUG: Очищенный caption_text (для видео): '{caption_text}'") # <-- Уточнено
 
-        # Обрезаем подпись до 1024 символов (лимит Telegram для медиагрупп)
+        # Обрезаем подпись (для видео) до 1024 символов
         if len(caption_text) > 1024:
-            print(f"⚠️ Подпись для {gen_id} слишком длинная ({len(caption_text)} симв). Обрезаем до 1020...")
-            caption_text = caption_text[:1020] + "..." # Обрезаем и добавляем многоточие
+            print(f"⚠️ Подпись для видео {gen_id} слишком длинная ({len(caption_text)} симв). Обрезаем до 1020...")
+            caption_text = caption_text[:1020] + "..."
 
         # --- УЛУЧШЕННОЕ ИЗВЛЕЧЕНИЕ САРКАЗМА ---
-        sarcasm_data = data.get("sarcasm", {}) # Получаем объект sarcasm
-        comment_value = sarcasm_data.get("comment") # Получаем значение поля comment
+        sarcasm_data = data.get("sarcasm", {})
+        comment_value = sarcasm_data.get("comment")
         if isinstance(comment_value, dict):
-            # Если comment - это уже словарь
             sarcasm_comment = comment_value.get("комментарий", "").strip()
-            if not sarcasm_comment:
-                print(f"⚠️ Ключ 'комментарий' отсутствует или пуст в объекте 'sarcasm.comment' ({gen_id}).")
+            if not sarcasm_comment: print(f"⚠️ Ключ 'комментарий' отсутствует или пуст в объекте 'sarcasm.comment' ({gen_id}).")
         elif isinstance(comment_value, str) and comment_value.strip():
-            # Если comment - это непустая строка
             raw_comment_str = comment_value.strip()
             try:
-                # Пытаемся распарсить как JSON
                 comment_data = json.loads(raw_comment_str)
                 sarcasm_comment = comment_data.get("комментарий", "").strip()
-                if not sarcasm_comment:
-                    print(f"⚠️ Ключ 'комментарий' отсутствует или пуст во вложенном JSON поля 'sarcasm.comment' ({gen_id}).")
+                if not sarcasm_comment: print(f"⚠️ Ключ 'комментарий' отсутствует или пуст во вложенном JSON поля 'sarcasm.comment' ({gen_id}).")
             except json.JSONDecodeError:
-                 # Если не JSON, но строка не пустая и не похожа на пустой объект, используем как есть
                  if raw_comment_str not in ["{}"]:
                       print(f"ℹ️ Поле 'sarcasm.comment' для {gen_id} не является валидным JSON, но содержит текст. Используем как есть.")
                       sarcasm_comment = raw_comment_str
@@ -332,13 +318,11 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                  print(f"⚠️ Неожиданная ошибка при обработке 'sarcasm.comment' для {gen_id}: {e}")
                  sarcasm_comment = ""
         else:
-             # Если поле comment отсутствует, пустое или имеет другой тип
              print(f"ℹ️ Поле 'sarcasm.comment' пустое, отсутствует или имеет неожиданный тип в JSON для {gen_id}.")
-
         print(f"DEBUG: Извлеченный sarcasm_comment: '{sarcasm_comment}'")
 
         # --- Извлечение опроса (без изменений) ---
-        poll_data = sarcasm_data.get("poll", {}) # Используем уже полученный sarcasm_data
+        poll_data = sarcasm_data.get("poll", {})
         poll_question = poll_data.get("question", "").strip()
         poll_options = [str(opt).strip() for opt in poll_data.get("options", []) if str(opt).strip()]
         poll_question = poll_question[:300]
@@ -346,12 +330,10 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         print(f"DEBUG: Извлеченный poll_question: '{poll_question}'")
         print(f"DEBUG: Извлеченные poll_options: {poll_options}")
 
-        # Если дошли до сюда без ошибок, считаем обработку JSON успешной
         json_processed_successfully = True
         print(f"DEBUG: json_processed_successfully установлен в True")
 
     except json.JSONDecodeError as e:
-        # Ошибка при чтении основного JSON файла
         print(f"❌ Ошибка декодирования основного JSON файла {local_json_path}: {e}")
         os.makedirs(ERROR_DIR, exist_ok=True)
         try:
@@ -363,7 +345,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         if os.path.exists(local_video_path): os.remove(local_video_path)
         return False
     except Exception as e:
-        # Любая другая ошибка при обработке JSON
         print(f"❌ Непредвиденная ошибка при обработке JSON {gen_id}: {e}")
         if os.path.exists(local_json_path): os.remove(local_json_path)
         if os.path.exists(local_png_path): os.remove(local_png_path)
@@ -375,115 +356,62 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     sarcasm_sent = False
     poll_sent = False
     # Флаги для отслеживания успеха отправки медиа
-    photo_sent = False
-    video_sent = False # Используем video_sent вместо album_sent
+    photo_sent_status = None # None - не пытались, True - успешно, False - ошибка
+    video_sent_status = None # None - не пытались, True - успешно, False - ошибка
 
-    # 1. Отправляем основные медиа (фото и/или видео)
-    if not png_downloaded and not video_downloaded:
-        print(f"⚠️ Не удалось скачать ни PNG, ни Видео для {gen_id}. Основной контент не будет отправлен.")
-        media_sent_successfully = False # Явно указываем неуспех
+    # 1. Отправляем фото (если есть) БЕЗ подписи
+    if png_downloaded:
+        png_file_handle = None
+        try:
+            print(f"✈️ Отправляем фото {gen_id}.png БЕЗ подписи...")
+            png_file_handle = open(local_png_path, "rb")
+            await bot.send_photo(
+                chat_id=TELEGRAM_CHAT_ID,
+                photo=png_file_handle,
+                # caption=None, # Явно не указываем подпись
+                read_timeout=120,
+                connect_timeout=120,
+                write_timeout=120
+            )
+            photo_sent_status = True
+            print("✅ Фото отправлено.")
+        except Exception as e:
+            print(f"❌ Ошибка при отправке фото для {gen_id}: {e}")
+            photo_sent_status = False
+        finally:
+            if png_file_handle: png_file_handle.close()
     else:
-        media_sent_successfully = True # Предполагаем успех, пока не докажем обратное
-        # --- Случай 1: Есть и Фото, и Видео (двухшаговая отправка) ---
-        if png_downloaded and video_downloaded:
-            print("ℹ️ Обнаружены и PNG, и Видео. Используем двухшаговую отправку.")
-            # Шаг 1.1: Отправка фото с подписью
-            png_file_handle = None
-            try:
-                print(f"✈️ Шаг 1.1: Отправляем фото {gen_id}.png с подписью...")
-                png_file_handle = open(local_png_path, "rb")
-                await bot.send_photo(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    photo=png_file_handle,
-                    caption=caption_text,
-                    parse_mode="HTML",
-                    read_timeout=120,
-                    connect_timeout=120,
-                    write_timeout=120
-                )
-                photo_sent = True
-                print("✅ Фото отправлено.")
-            except Exception as e:
-                print(f"❌ Ошибка при отправке фото для {gen_id}: {e}")
-                media_sent_successfully = False # Не удалось отправить фото
-            finally:
-                if png_file_handle: png_file_handle.close()
+        print("ℹ️ PNG не скачан, отправка фото пропускается.")
+        photo_sent_status = True # Считаем успешным, так как отправлять и не нужно было
 
-            # Шаг 1.2: Отправка видео без подписи (если фото отправилось успешно)
-            video_file_handle = None
-            if media_sent_successfully: # Продолжаем только если фото ушло
-                try:
-                    print(f"✈️ Шаг 1.2: Отправляем видео {gen_id}.mp4 без подписи...")
-                    video_file_handle = open(local_video_path, "rb")
-                    # Отправляем видео как медиагруппу из одного элемента (без подписи)
-                    # Это может выглядеть чуть иначе, чем просто send_video, но сохраняет логику
-                    await bot.send_media_group(
-                        chat_id=TELEGRAM_CHAT_ID,
-                        media=[InputMediaVideo(video_file_handle, supports_streaming=True)],
-                        read_timeout=120,
-                        connect_timeout=120,
-                        write_timeout=120
-                    )
-                    video_sent = True
-                    print("✅ Видео отправлено.")
-                except Exception as e:
-                    print(f"❌ Ошибка при отправке видео (как группы) для {gen_id}: {e}")
-                    media_sent_successfully = False # Не удалось отправить видео
-                finally:
-                    if video_file_handle: video_file_handle.close()
+    # 2. Отправляем видео (если есть) С подписью
+    if video_downloaded:
+        video_file_handle = None
+        try:
+            print(f"✈️ Отправляем видео {gen_id}.mp4 С подписью...")
+            video_file_handle = open(local_video_path, "rb")
+            await bot.send_video(
+                chat_id=TELEGRAM_CHAT_ID,
+                video=video_file_handle,
+                caption=caption_text, # <-- Подпись здесь
+                parse_mode="HTML",
+                supports_streaming=True,
+                read_timeout=120,
+                connect_timeout=120,
+                write_timeout=120
+            )
+            video_sent_status = True
+            print("✅ Видео отправлено.")
+        except Exception as e:
+            print(f"❌ Ошибка при отправке видео для {gen_id}: {e}")
+            video_sent_status = False
+        finally:
+            if video_file_handle: video_file_handle.close()
+    else:
+        print("ℹ️ Видео не скачано, отправка видео пропускается.")
+        video_sent_status = True # Считаем успешным, так как отправлять и не нужно было
 
-        # --- Случай 2: Есть только Фото ---
-        elif png_downloaded:
-            print("ℹ️ Обнаружено только PNG. Отправляем через send_photo.")
-            png_file_handle = None
-            try:
-                print(f"✈️ Отправляем фото {gen_id}.png с подписью...")
-                png_file_handle = open(local_png_path, "rb")
-                await bot.send_photo(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    photo=png_file_handle,
-                    caption=caption_text,
-                    parse_mode="HTML",
-                    read_timeout=120,
-                    connect_timeout=120,
-                    write_timeout=120
-                )
-                photo_sent = True
-                video_sent = True # Считаем, что все необходимые медиа (только фото) отправлены
-                print("✅ Фото отправлено.")
-            except Exception as e:
-                print(f"❌ Ошибка при отправке фото для {gen_id}: {e}")
-                media_sent_successfully = False
-            finally:
-                if png_file_handle: png_file_handle.close()
-
-        # --- Случай 3: Есть только Видео ---
-        elif video_downloaded:
-            print("ℹ️ Обнаружено только Видео. Отправляем через send_video.")
-            video_file_handle = None
-            try:
-                print(f"✈️ Отправляем видео {gen_id}.mp4 с подписью...")
-                video_file_handle = open(local_video_path, "rb")
-                await bot.send_video(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    video=video_file_handle,
-                    caption=caption_text,
-                    parse_mode="HTML",
-                    supports_streaming=True,
-                    read_timeout=120,
-                    connect_timeout=120,
-                    write_timeout=120
-                )
-                photo_sent = True # Считаем, что все необходимые медиа (только видео) отправлены
-                video_sent = True
-                print("✅ Видео отправлено.")
-            except Exception as e:
-                print(f"❌ Ошибка при отправке видео для {gen_id}: {e}")
-                media_sent_successfully = False
-            finally:
-                if video_file_handle: video_file_handle.close()
-
-    # 2. Отправляем сарказм, если он есть
+    # 3. Отправляем сарказм, если он есть
     print(f"DEBUG: Проверка перед отправкой сарказма: json_processed_successfully={json_processed_successfully}, sarcasm_comment='{sarcasm_comment}'")
     if json_processed_successfully and sarcasm_comment:
         sarcasm_text_formatted = f"📜 <i>{sarcasm_comment}</i>"
@@ -506,7 +434,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     elif not json_processed_successfully:
         print("DEBUG: Условие для отправки сарказма не выполнено (json_processed_successfully is False).")
 
-    # 3. Отправляем опрос, если он валиден
+    # 4. Отправляем опрос, если он валиден
     print(f"DEBUG: Проверка перед отправкой опроса: json_processed_successfully={json_processed_successfully}, poll_question='{poll_question}', len(poll_options)={len(poll_options)}")
     if json_processed_successfully and poll_question and len(poll_options) >= 2:
         poll_question_formatted = f"🎭 {poll_question}"
@@ -531,8 +459,8 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
          print("DEBUG: Условие для отправки опроса не выполнено (json_processed_successfully is False).")
 
     # --- Завершение и обработка файлов ---
-    # Успех определяется отправкой ВСЕХ основных медиа (фото и/или видео)
-    success = media_sent_successfully
+    # Успех определяется отправкой ВСЕХ существующих медиа (фото и/или видео)
+    success = (photo_sent_status is True) and (video_sent_status is True)
 
     if success:
         print(f"✅ Успешная публикация основного контента (медиа) для {gen_id}.")
@@ -552,7 +480,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         # Если основные медиа не были отправлены
         if json_processed_successfully: # Но JSON был обработан
              print(f"⚠️ Основной контент (медиа) для {gen_id} не был отправлен. ID не добавлен в опубликованные.")
-             print(f"   (Статус отправки: Фото - {'Да' if photo_sent else 'Нет'}, Видео - {'Да' if video_sent else 'Нет'}, Сарказм - {'Да' if sarcasm_sent else 'Нет'}, Опрос - {'Да' if poll_sent else 'Нет'})") # <-- Добавлен статус фото/видео
+             print(f"   (Статус отправки: Фото - {photo_sent_status}, Видео - {video_sent_status}, Сарказм - {'Да' if sarcasm_sent else 'Нет'}, Опрос - {'Да' if poll_sent else 'Нет'})")
              print(f"   🗑️ Удаляем локальные файлы для {gen_id}, чтобы избежать дублирования при след. запуске.")
         # else: # Если была ошибка обработки JSON, файлы уже удалены или перемещены в errors
 
@@ -575,7 +503,7 @@ async def main():
     Главная асинхронная функция скрипта.
     """
     print("\n" + "="*50)
-    print("🚀 Запуск скрипта публикации B2 -> Telegram (v2: Альбом / Двухшаговая отправка)") # <-- Обновлено название
+    print("🚀 Запуск скрипта публикации B2 -> Telegram (v5: Фото + Видео с подписью)") # <-- Обновлено название
     print("="*50)
 
     print("🧹 Очищаем/создаем локальные папки для скачивания и обработки...")
@@ -655,3 +583,4 @@ if __name__ == "__main__":
         print(f"\n💥 Критическая ошибка: {e}")
     except Exception as e:
          print(f"\n💥 Непредвиденная критическая ошибка: {e}")
+
