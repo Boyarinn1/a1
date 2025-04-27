@@ -284,9 +284,9 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         with open(local_json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # --- ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ (УЛУЧШЕНО: "текст", "content", "post") ---
+        # --- ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ (УЛУЧШЕНО: "текст", "content", "text", "post") ---
         content_value = data.get("content")
-        possible_text_keys = ["текст", "content"]
+        possible_text_keys = ["текст", "content", "text"] # <-- Добавлен "text"
         found_text = None
         content_data = None
 
@@ -315,7 +315,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                     if isinstance(item, dict) and len(item) == 1:
                         post_texts.append(list(item.values())[0])
                 if post_texts:
-                    # Объединяем через двойной перенос строки, чтобы сохранить абзацы между частями
                     found_text = "\n\n".join(filter(None, post_texts))
                     print(f"ℹ️ Текст извлечен из структуры 'post' для {gen_id}.")
 
@@ -323,25 +322,24 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                 for key in possible_text_keys:
                     if key in content_data:
                         found_text = content_data[key]
+                        print(f"ℹ️ Текст извлечен по ключу '{key}' для {gen_id}.") # <-- Добавлен лог
                         break
                 if found_text is None:
                      print(f"⚠️ Ни один из ключей {possible_text_keys} или структура 'post' не найдены в 'content' ({gen_id}).")
 
         caption_text = found_text.strip() if isinstance(found_text, str) else ""
         caption_text = remove_system_phrases(caption_text)
-        # --- ДОБАВЛЕНА ОБРАБОТКА АБЗАЦЕВ ---
-        # Заменяем одинарные переносы (не часть двойных) на двойные
         caption_text = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', caption_text)
-        print(f"DEBUG: Очищенный caption_text (для фото) после обработки абзацев: '{caption_text}'") # <-- Уточнено
+        print(f"DEBUG: Очищенный caption_text (для фото) после обработки абзацев: '{caption_text}'")
 
         if len(caption_text) > 1024:
             print(f"⚠️ Подпись для фото {gen_id} слишком длинная ({len(caption_text)} симв). Обрезаем до 1020...")
             caption_text = caption_text[:1020] + "..."
 
-        # --- ИЗВЛЕЧЕНИЕ САРКАЗМА (с проверкой ключей "комментарий" и "sarcastic_comment") ---
+        # --- ИЗВЛЕЧЕНИЕ САРКАЗМА (УЛУЧШЕНО: "комментарий", "sarcastic_comment", "comment") ---
         sarcasm_data = data.get("sarcasm", {})
         comment_value = sarcasm_data.get("comment")
-        possible_comment_keys = ["комментарий", "sarcastic_comment"]
+        possible_comment_keys = ["комментарий", "sarcastic_comment", "comment"] # <-- Добавлен "comment"
         found_comment = None
         comment_data_parsed = None
 
@@ -366,6 +364,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
              for key in possible_comment_keys:
                  if key in comment_data_parsed:
                      found_comment = comment_data_parsed[key]
+                     print(f"ℹ️ Сарказм извлечен по ключу '{key}' для {gen_id}.") # <-- Добавлен лог
                      break
              if found_comment is None:
                   print(f"⚠️ Ни один из ключей {possible_comment_keys} не найден в 'sarcasm.comment' ({gen_id}).")
@@ -427,7 +426,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             if video_file_handle: video_file_handle.close()
 
         # --- Отправка сарказма и опроса ---
-        # (Логика отправки сарказма и опроса остается такой же, как в предыдущей версии)
         # 3. Отправляем сарказм, если он есть
         if sarcasm_comment:
             sarcasm_text_formatted = f"📜 <i>{sarcasm_comment}</i>"
@@ -531,7 +529,7 @@ async def main():
     Останавливается после первой успешной публикации.
     """
     print("\n" + "="*50)
-    print("🚀 Запуск скрипта публикации B2 -> Telegram (v12: Альбом + обработка абзацев)") # <-- Обновлено название
+    print("🚀 Запуск скрипта публикации B2 -> Telegram (v13: Альбом + все ключи)") # <-- Обновлено название
     print("="*50)
 
     print("🧹 Очищаем/создаем локальные папки для скачивания и обработки...")
