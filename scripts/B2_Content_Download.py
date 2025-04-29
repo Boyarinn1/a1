@@ -22,11 +22,8 @@ S3_ENDPOINT = os.getenv("S3_ENDPOINT", "production") # По умолчанию '
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# *** ИЗМЕНЕНИЕ: Определяем суффикс сарказма (пока хардкод, т.к. нет ConfigManager) ***
-# В идеале, это тоже должно браться из окружения или конфига
+# Определяем суффикс сарказма (пока хардкод, т.к. нет ConfigManager)
 SARCASM_SUFFIX = "_sarcasm.png"
-# *** КОНЕЦ ИЗМЕНЕНИЯ ***
-
 
 # Проверяем наличие всех необходимых переменных
 if not all([
@@ -36,7 +33,6 @@ if not all([
     TELEGRAM_TOKEN,
     TELEGRAM_CHAT_ID
 ]):
-    # Если чего-то не хватает, выводим ошибку и завершаем работу
     raise RuntimeError("❌ Ошибка: Не установлены все необходимые переменные окружения!")
 else:
     print("✅ Все необходимые переменные окружения загружены.")
@@ -44,10 +40,10 @@ else:
 # ------------------------------------------------------------
 # 2) Настраиваем пути, объект Telegram-бота и B2 SDK
 # ------------------------------------------------------------
-BASE_DIR = os.path.dirname(__file__) # Директория, где находится скрипт
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloaded") # Папка для временного хранения скачанных файлов
-PROCESSED_DIR = os.path.join(DOWNLOAD_DIR, "processed") # Папка для успешно обработанных файлов
-ERROR_DIR = os.path.join(DOWNLOAD_DIR, "errors") # Папка для файлов с ошибками (например, битый JSON)
+BASE_DIR = os.path.dirname(__file__)
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloaded")
+PROCESSED_DIR = os.path.join(DOWNLOAD_DIR, "processed")
+ERROR_DIR = os.path.join(DOWNLOAD_DIR, "errors")
 
 # Инициализация Telegram бота
 try:
@@ -76,40 +72,30 @@ def load_published_ids() -> Set[str]:
     Возвращает set с ID. Если файл не найден или поврежден, возвращает пустой set.
     """
     local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
-    config_key = "config/config_public.json" # Путь к файлу конфигурации в бакете
+    config_key = "config/config_public.json"
     published_ids = set()
     try:
         print(f"📥 Пытаемся скачать {config_key} для получения списка опубликованных ID...")
-        # Убедимся, что папка для скачивания существует
         os.makedirs(os.path.dirname(local_config_path), exist_ok=True)
-        # Скачиваем файл конфигурации из B2
         bucket.download_file_by_name(config_key).save_to(local_config_path)
-        # Читаем JSON из скачанного файла
         with open(local_config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # Извлекаем список ID из поля 'generation_id'
         published = data.get("generation_id", [])
         if isinstance(published, list):
-             published_ids = set(published) # Преобразуем список в множество для быстрого поиска
+             published_ids = set(published)
              print(f"ℹ️ Загружено {len(published_ids)} опубликованных ID из {config_key}.")
         else:
              print(f"⚠️ Поле 'generation_id' в {config_key} не является списком. Используем пустой список.")
-        # Удаляем локальную копию конфига после чтения
         os.remove(local_config_path)
-
     except FileNotPresent:
-         # Если файл конфигурации не найден в B2, это нормально для первого запуска
          print(f"⚠️ Файл {config_key} не найден в B2. Будет создан новый при первой успешной публикации.")
     except json.JSONDecodeError as e:
          print(f"⚠️ Ошибка декодирования JSON в файле {config_key}: {e}. Используем пустой список.")
-         # Если файл скачался, но битый, удаляем его локальную копию
          if os.path.exists(local_config_path): os.remove(local_config_path)
     except B2Error as e:
-        # Обработка специфичных ошибок B2 SDK при скачивании
         print(f"⚠️ Ошибка B2 SDK при скачивании {config_key}: {e}. Используем пустой список.")
         if os.path.exists(local_config_path): os.remove(local_config_path)
     except Exception as e:
-        # Обработка прочих непредвиденных ошибок
         print(f"⚠️ Не удалось загрузить или прочитать {config_key}: {e}. Используем пустой список.")
         if os.path.exists(local_config_path): os.remove(local_config_path)
     return published_ids
@@ -122,29 +108,17 @@ def save_published_ids(pub_ids: Set[str]):
     local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
     config_key = "config/config_public.json"
     try:
-        # Создаем структуру данных для JSON: словарь с ключом 'generation_id'
-        # и значением - отсортированным списком ID из множества
         data = {"generation_id": sorted(list(pub_ids))}
-
-        # Записываем в локальный файл
-        os.makedirs(os.path.dirname(local_config_path), exist_ok=True) # Убедимся, что папка существует
+        os.makedirs(os.path.dirname(local_config_path), exist_ok=True)
         with open(local_config_path, "w", encoding="utf-8") as f:
-            # Сохраняем JSON с отступами для читаемости
             json.dump(data, f, ensure_ascii=False, indent=4)
         print(f"💾 Локально сохранен обновленный список ID в {local_config_path}")
-
-        # Загружаем обновленный файл в B2, перезаписывая старый
         print(f"📤 Загружаем обновленный {config_key} в B2...")
         bucket.upload_local_file(local_config_path, config_key)
         print(f"✅ Успешно обновлен {config_key} в B2. Всего ID: {len(pub_ids)}")
-
-        # Удаляем локальную копию после загрузки
         os.remove(local_config_path)
-
     except Exception as e:
-        # Ловим любые ошибки при сохранении или загрузке
         print(f"⚠️ Не удалось сохранить или загрузить {config_key}: {e}")
-        # Если локальный файл остался, удаляем его, чтобы не мешал при следующем запуске
         if os.path.exists(local_config_path):
             try:
                 os.remove(local_config_path)
@@ -159,163 +133,117 @@ def remove_system_phrases(text: str) -> str:
     Очищает текст от стандартных заголовков ("Вступление:", "Основная часть:" и т.п.)
     и заменяет множественные переводы строк на двойной перевод строки.
     """
-    if not isinstance(text, str): # Проверка на случай, если придет не строка
+    if not isinstance(text, str):
         return ""
-
     system_phrases = [
         "Вступление:", "Основная часть:", "Интересный факт:", "Заключение:",
         "🔥Вступление", "📚Основная часть", "🔍Интересный факт"
-        # Можно добавить другие фразы при необходимости
     ]
     clean_text = text
     for phrase in system_phrases:
-        # Используем регулярное выражение для удаления фразы без учета регистра
-        # и с возможными пробелами/переводами строк вокруг нее.
-        # re.escape экранирует спецсимволы в фразе, если они есть.
         clean_text = re.sub(r'^\s*' + re.escape(phrase) + r'\s*\n?', '', clean_text, flags=re.IGNORECASE | re.MULTILINE).strip()
         clean_text = re.sub(r'\n\s*' + re.escape(phrase) + r'\s*', '\n', clean_text, flags=re.IGNORECASE).strip()
-
-
-    # Заменяем три и более перевода строки на два (сохраняет абзацы)
     clean_text = re.sub(r"\n\s*\n+", "\n\n", clean_text)
-    # Удаляем возможные пустые строки в начале и конце текста
     return clean_text.strip()
 
 # ------------------------------------------------------------
-# 4) Публикация одного generation_id (Альбом: Фото + Видео + Сарказм) - ИЗМЕНЕНА
+# 4) Публикация одного generation_id (Альбом: Фото + Видео, Отдельно: Сарказм + Опрос) - ИЗМЕНЕНА
 # ------------------------------------------------------------
 async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str]) -> bool:
     """
     Скачивает JSON, PNG, Video и Sarcasm PNG.
     Если все 4 файла присутствуют:
-    1. Отправляет медиагруппу (Фото + Видео + Сарказм Фото) с подписью у первого Фото.
-    2. Отправляет Отдельное сообщение с опросом (если есть).
+    1. Отправляет МЕДИАГРУППУ (Фото + Видео) с подписью у первого Фото.
+    2. Отправляет САРКАЗМ ФОТО отдельным сообщением.
+    3. Ждет 1 секунду.
+    4. Отправляет ОПРОС (если есть).
     Если хотя бы один из 4 файлов отсутствует,
     пропускает публикацию ПОЛНОСТЬЮ и возвращает False.
-    Возвращает True, если медиагруппа была успешно отправлена, иначе False.
+    Возвращает True, если медиагруппа и фото сарказма были успешно отправлены, иначе False.
     """
     print(f"⚙️ Обрабатываем gen_id: {gen_id} из папки {folder}")
-    # Формируем ключи (пути) к файлам в B2
+    # Формируем ключи
     json_file_key = f"{folder}{gen_id}.json"
     video_file_key = f"{folder}{gen_id}.mp4"
     png_file_key = f"{folder}{gen_id}.png"
-    # *** ИЗМЕНЕНИЕ: Добавляем ключ для картинки сарказма ***
     sarcasm_png_file_key = f"{folder}{gen_id}{SARCASM_SUFFIX}"
-    # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
-    # Формируем локальные пути для скачивания
+    # Формируем локальные пути
     local_json_path = os.path.join(DOWNLOAD_DIR, f"{gen_id}.json")
     local_video_path = os.path.join(DOWNLOAD_DIR, f"{gen_id}.mp4")
     local_png_path = os.path.join(DOWNLOAD_DIR, f"{gen_id}.png")
-    # *** ИЗМЕНЕНИЕ: Добавляем локальный путь для картинки сарказма ***
     local_sarcasm_png_path = os.path.join(DOWNLOAD_DIR, f"{gen_id}{SARCASM_SUFFIX}")
-    # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
-    # Флаги для отслеживания успешности скачивания
+    # Флаги скачивания
     json_downloaded = False
     video_downloaded = False
     png_downloaded = False
-    # *** ИЗМЕНЕНИЕ: Добавляем флаг для картинки сарказма ***
     sarcasm_png_downloaded = False
-    # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
-    # Список всех локальных путей для легкой очистки
     local_files_to_clean = [local_json_path, local_video_path, local_png_path, local_sarcasm_png_path]
 
-    # Функция для очистки скачанных файлов
     def cleanup_local_files():
         for file_path in local_files_to_clean:
             if os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                except Exception as e:
-                    print(f"  ⚠️ Не удалось удалить временный файл {file_path}: {e}")
+                try: os.remove(file_path)
+                except Exception as e: print(f"  ⚠️ Не удалось удалить временный файл {file_path}: {e}")
 
     # --- Скачивание файлов ---
-    # 1. Скачиваем JSON (обязательно)
     try:
+        # 1. JSON
         print(f"📥 Скачиваем JSON: {json_file_key} -> {local_json_path}")
         os.makedirs(os.path.dirname(local_json_path), exist_ok=True)
         bucket.download_file_by_name(json_file_key).save_to(local_json_path)
         json_downloaded = True
         print(f"✅ JSON скачан: {local_json_path}")
-    except FileNotPresent:
-        print(f"❌ Группа {gen_id} неполная (отсутствует JSON). Публикация пропускается.")
-        cleanup_local_files()
-        return False
-    except B2Error as e:
-        print(f"⚠️ Ошибка B2 SDK при скачивании JSON {json_file_key}: {e}")
-        cleanup_local_files()
-        return False
-    except Exception as e:
-        print(f"⚠️ Неожиданная ошибка при скачивании JSON {json_file_key}: {e}")
-        cleanup_local_files()
-        return False
-
-    # 2. Пытаемся скачать PNG (основное фото)
-    try:
+        # 2. PNG
         print(f"📥 Пытаемся скачать PNG: {png_file_key} -> {local_png_path}")
         os.makedirs(os.path.dirname(local_png_path), exist_ok=True)
         bucket.download_file_by_name(png_file_key).save_to(local_png_path)
         png_downloaded = True
         print(f"✅ PNG скачан: {local_png_path}")
-    except FileNotPresent:
-        print(f"⚠️ PNG файл не найден для {gen_id}.")
-    except B2Error as e:
-        print(f"⚠️ Ошибка B2 SDK при скачивании PNG {png_file_key}: {e}")
-    except Exception as e:
-        print(f"⚠️ Неожиданная ошибка при скачивании PNG {png_file_key}: {e}")
-
-    # 3. Пытаемся скачать видео
-    try:
+        # 3. Video
         print(f"📥 Пытаемся скачать видео: {video_file_key} -> {local_video_path}")
         os.makedirs(os.path.dirname(local_video_path), exist_ok=True)
         bucket.download_file_by_name(video_file_key).save_to(local_video_path)
         video_downloaded = True
         print(f"✅ Видео скачано: {local_video_path}")
-    except FileNotPresent:
-        print(f"⚠️ Видео файл не найден для {gen_id}.")
-    except B2Error as e:
-        print(f"⚠️ Ошибка B2 SDK при скачивании видео {video_file_key}: {e}")
-    except Exception as e:
-        print(f"⚠️ Неожиданная ошибка при скачивании видео {video_file_key}: {e}")
-
-    # *** ИЗМЕНЕНИЕ: 4. Пытаемся скачать картинку сарказма ***
-    try:
+        # 4. Sarcasm PNG
         print(f"📥 Пытаемся скачать Sarcasm PNG: {sarcasm_png_file_key} -> {local_sarcasm_png_path}")
         os.makedirs(os.path.dirname(local_sarcasm_png_path), exist_ok=True)
         bucket.download_file_by_name(sarcasm_png_file_key).save_to(local_sarcasm_png_path)
         sarcasm_png_downloaded = True
         print(f"✅ Sarcasm PNG скачан: {local_sarcasm_png_path}")
-    except FileNotPresent:
-        print(f"⚠️ Sarcasm PNG файл не найден для {gen_id}.")
+
+    except FileNotPresent as e:
+        print(f"❌ Группа {gen_id} неполная ({e.file_name} отсутствует). Публикация пропускается.")
+        cleanup_local_files()
+        return False
     except B2Error as e:
-        print(f"⚠️ Ошибка B2 SDK при скачивании Sarcasm PNG {sarcasm_png_file_key}: {e}")
+        print(f"⚠️ Ошибка B2 SDK при скачивании файлов для {gen_id}: {e}")
+        cleanup_local_files()
+        return False
     except Exception as e:
-        print(f"⚠️ Неожиданная ошибка при скачивании Sarcasm PNG {sarcasm_png_file_key}: {e}")
-    # *** КОНЕЦ ИЗМЕНЕНИЯ ***
+        print(f"⚠️ Неожиданная ошибка при скачивании файлов для {gen_id}: {e}")
+        cleanup_local_files()
+        return False
 
     # --- ПРОВЕРКА НА ПОЛНОТУ ГРУППЫ (ВСЕ 4 ФАЙЛА) ---
-    if not (png_downloaded and video_downloaded and sarcasm_png_downloaded):
-        print(f"❌ Группа {gen_id} неполная (PNG: {png_downloaded}, Видео: {video_downloaded}, Sarcasm PNG: {sarcasm_png_downloaded}). Публикация пропускается ПОЛНОСТЬЮ.")
+    # Эта проверка теперь избыточна, т.к. FileNotPresent ловится выше, но оставим для ясности
+    if not (json_downloaded and png_downloaded and video_downloaded and sarcasm_png_downloaded):
+        print(f"❌ Группа {gen_id} неполная (JSON:{json_downloaded}, PNG:{png_downloaded}, Видео:{video_downloaded}, Sarcasm:{sarcasm_png_downloaded}). Пропуск.")
         cleanup_local_files()
-        return False # Возвращаем False, т.к. публикация не состоялась
+        return False
 
-    # --- Если все файлы на месте, продолжаем обработку и отправку ---
-    print(f"✅ Все файлы для {gen_id} (JSON, PNG, Видео, Sarcasm PNG) найдены. Продолжаем обработку и отправку...")
-    caption_text = "" # Текст для подписи к ФОТО
-    # *** ИЗМЕНЕНИЕ: Убираем переменную для текста сарказма ***
-    # sarcasm_comment = ""
-    # *** КОНЕЦ ИЗМЕНЕНИЯ ***
-    poll_question = "" # Вопрос для опроса
-    poll_options = [] # Варианты ответа для опроса
+    print(f"✅ Все 4 файла для {gen_id} найдены. Продолжаем обработку и отправку...")
+    caption_text = ""
+    poll_question = ""
+    poll_options = []
     json_processed_successfully = False
-    album_sent = False # Флаг для отслеживания успеха отправки медиагруппы
-    # *** ИЗМЕНЕНИЕ: Убираем флаг для сарказма ***
-    # sarcasm_sent = False
-    # *** КОНЕЦ ИЗМЕНЕНИЯ ***
+    album_sent = False
+    sarcasm_photo_sent = False # Новый флаг
     poll_sent = False
-    success = False # Инициализируем успех как False
+    success = False
 
     try:
         # --- Обработка JSON ---
@@ -327,174 +255,135 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         possible_text_keys = ["текст", "content", "text"]
         found_text = None
         content_data = None
-
-        if isinstance(content_value, dict):
-            content_data = content_value
+        if isinstance(content_value, dict): content_data = content_value
         elif isinstance(content_value, str) and content_value.strip():
-            raw_content_str = content_value.strip()
-            try:
-                content_data = json.loads(raw_content_str)
-            except json.JSONDecodeError:
-                if raw_content_str not in ["{}"]:
-                     print(f"ℹ️ Поле 'content' для {gen_id} не является валидным JSON, но содержит текст. Используем как есть.")
-                     found_text = raw_content_str
-                else:
-                     print(f"⚠️ Не удалось распарсить JSON из поля 'content' для {gen_id}, и строка пуста или '{{}}'. Подпись будет пустой.")
-            except Exception as e:
-                 print(f"⚠️ Неожиданная ошибка при обработке поля 'content' для {gen_id}: {e}")
-        else:
-            print(f"ℹ️ Поле 'content' пустое, отсутствует или имеет неожиданный тип в JSON для {gen_id}.")
-
+            try: content_data = json.loads(content_value.strip())
+            except json.JSONDecodeError: found_text = content_value.strip() if content_value.strip() not in ["{}"] else None
+            except Exception as e: print(f"⚠️ Ошибка обработки 'content' {gen_id}: {e}")
         if content_data is not None:
             post_list = content_data.get("post")
             if isinstance(post_list, list):
-                post_texts = []
-                for item in post_list:
-                    if isinstance(item, dict) and len(item) == 1:
-                        post_texts.append(list(item.values())[0])
-                if post_texts:
-                    found_text = "\n\n".join(filter(None, post_texts))
-                    print(f"ℹ️ Текст извлечен из структуры 'post' для {gen_id}.")
-
+                post_texts = [list(item.values())[0] for item in post_list if isinstance(item, dict) and len(item) == 1]
+                if post_texts: found_text = "\n\n".join(filter(None, post_texts))
             if found_text is None:
                 for key in possible_text_keys:
-                    if key in content_data:
-                        found_text = content_data[key]
-                        print(f"ℹ️ Текст извлечен по ключу '{key}' для {gen_id}.")
-                        break
-                if found_text is None:
-                     print(f"⚠️ Ни один из ключей {possible_text_keys} или структура 'post' не найдены в 'content' ({gen_id}).")
-
+                    if key in content_data: found_text = content_data[key]; break
         caption_text = found_text.strip() if isinstance(found_text, str) else ""
         caption_text = remove_system_phrases(caption_text)
         caption_text = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', caption_text)
-        print(f"DEBUG: Очищенный caption_text (для фото) после обработки абзацев: '{caption_text}'")
-
-        if len(caption_text) > 1024:
-            print(f"⚠️ Подпись для фото {gen_id} слишком длинная ({len(caption_text)} симв). Обрезаем до 1020...")
-            caption_text = caption_text[:1020] + "..."
-
-        # *** ИЗМЕНЕНИЕ: Удаляем блок извлечения текста сарказма ***
-        # --- ИЗВЛЕЧЕНИЕ САРКАЗМА (УЛУЧШЕНО: "комментарий", "sarcastic_comment", "comment") ---
-        # ... (этот блок удален) ...
-        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
+        if len(caption_text) > 1024: caption_text = caption_text[:1020] + "..."
+        print(f"DEBUG: Подпись для фото: '{caption_text[:50]}...'")
 
         # --- Извлечение опроса (без изменений) ---
-        sarcasm_data = data.get("sarcasm", {}) # Все еще нужно для опроса
+        sarcasm_data = data.get("sarcasm", {})
         poll_data = sarcasm_data.get("poll", {})
-        poll_question = poll_data.get("question", "").strip()
-        poll_options = [str(opt).strip() for opt in poll_data.get("options", []) if str(opt).strip()]
-        poll_question = poll_question[:300]
-        poll_options = [opt[:100] for opt in poll_options][:10]
-        print(f"DEBUG: Извлеченный poll_question: '{poll_question}'")
-        print(f"DEBUG: Извлеченные poll_options: {poll_options}")
+        poll_question = poll_data.get("question", "").strip()[:300]
+        poll_options = [str(opt).strip()[:100] for opt in poll_data.get("options", []) if str(opt).strip()][:10]
+        print(f"DEBUG: Опрос: Q='{poll_question}', Opts={poll_options}")
 
         json_processed_successfully = True
-        print(f"DEBUG: json_processed_successfully установлен в True")
 
-        # --- Отправка в Telegram (Альбом: Фото + Видео + Сарказм Фото) ---
+        # --- Отправка в Telegram ---
         os.makedirs(PROCESSED_DIR, exist_ok=True)
-        media_items = []
         png_file_handle = None
         video_file_handle = None
-        # *** ИЗМЕНЕНИЕ: Добавляем хэндл для сарказм-фото ***
         sarcasm_png_file_handle = None
-        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
+        # *** ИЗМЕНЕНИЕ: Отправляем альбом из 2 файлов ***
+        # 1. Отправка медиагруппы (Фото + Видео)
         try:
-            # --- Подготовка списка медиа для альбома (ФОТО + ВИДЕО + САРКАЗМ ФОТО) ---
-            current_caption = caption_text # Используем временную переменную для подписи
-
-            # 1. Добавляем основное фото ПЕРВЫМ с подписью
+            media_items = []
+            current_caption = caption_text
+            # 1.1 Добавляем основное фото ПЕРВЫМ с подписью
             png_file_handle = open(local_png_path, "rb")
             media_items.append(InputMediaPhoto(png_file_handle, caption=current_caption, parse_mode="HTML"))
-            print(f"ℹ️ Добавлено PNG ПЕРВЫМ в медиагруппу. Подпись '{caption_text[:30]}...' будет добавлена (если не пустая).")
-            current_caption = "" # Очищаем подпись для следующих элементов
-
-            # 2. Добавляем видео ВТОРЫМ без подписи
+            print(f"ℹ️ Добавлено PNG ПЕРВЫМ в медиагруппу (с подписью).")
+            # 1.2 Добавляем видео ВТОРЫМ без подписи
             video_file_handle = open(local_video_path, "rb")
-            media_items.append(InputMediaVideo(video_file_handle, caption=current_caption, parse_mode="HTML", supports_streaming=True))
+            media_items.append(InputMediaVideo(video_file_handle, caption="", parse_mode="HTML", supports_streaming=True))
             print(f"ℹ️ Добавлено MP4 ВТОРЫМ в медиагруппу (без подписи).")
 
-            # *** ИЗМЕНЕНИЕ: 3. Добавляем сарказм фото ТРЕТЬИМ без подписи ***
-            sarcasm_png_file_handle = open(local_sarcasm_png_path, "rb")
-            media_items.append(InputMediaPhoto(sarcasm_png_file_handle, caption=current_caption, parse_mode="HTML"))
-            print(f"ℹ️ Добавлено Sarcasm PNG ТРЕТЬИМ в медиагруппу (без подписи).")
-            # *** КОНЕЦ ИЗМЕНЕНИЯ ***
-
-            # --- Отправка медиагруппы ---
-            print(f"✈️ Пытаемся отправить медиагруппу ({len(media_items)} элемент(а), фото первое) для {gen_id}...")
+            print(f"✈️ Пытаемся отправить медиагруппу ({len(media_items)} элемента) для {gen_id}...")
             await bot.send_media_group(
-                chat_id=TELEGRAM_CHAT_ID,
-                media=media_items,
-                read_timeout=120,
-                connect_timeout=120,
-                write_timeout=120
+                chat_id=TELEGRAM_CHAT_ID, media=media_items,
+                read_timeout=120, connect_timeout=120, write_timeout=120
             )
-            album_sent = True # Устанавливаем флаг успеха
-            print(f"✅ Медиагруппа для {gen_id} отправлена.")
+            album_sent = True
+            print(f"✅ Медиагруппа (Фото+Видео) для {gen_id} отправлена.")
 
         except Exception as e:
             print(f"❌ Ошибка при отправке медиагруппы для {gen_id}: {e}")
-            raise # Передаем ошибку выше, чтобы прервать публикацию
+            success = False
+            raise # Прерываем публикацию, если альбом не ушел
         finally:
-            # Важно: закрываем файловые дескрипторы, даже если была ошибка
             if png_file_handle: png_file_handle.close()
             if video_file_handle: video_file_handle.close()
-            # *** ИЗМЕНЕНИЕ: Закрываем хэндл сарказм-фото ***
-            if sarcasm_png_file_handle: sarcasm_png_file_handle.close()
-            # *** КОНЕЦ ИЗМЕНЕНИЯ ***
-
-        # --- Отправка опроса ---
-        # *** ИЗМЕНЕНИЕ: Удаляем блок отправки сарказма ***
-        # 3. Отправляем сарказм, если он есть
-        # ... (этот блок удален) ...
         # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
-        # 4. Отправляем опрос, если он валиден
-        if poll_question and len(poll_options) >= 2:
-            poll_question_formatted = f"🎭 {poll_question}"
+        # *** ИЗМЕНЕНИЕ: Отправляем фото сарказма отдельно ***
+        # 2. Отправка фото сарказма
+        if album_sent: # Отправляем только если альбом ушел
             try:
-                print(f"✈️ Отправляем опрос для {gen_id}...")
-                await bot.send_poll(
+                print(f"✈️ Отправляем фото сарказма для {gen_id}...")
+                sarcasm_png_file_handle = open(local_sarcasm_png_path, "rb")
+                await bot.send_photo(
                     chat_id=TELEGRAM_CHAT_ID,
-                    question=poll_question_formatted,
-                    options=poll_options,
-                    is_anonymous=True
+                    photo=sarcasm_png_file_handle,
+                    # caption="" # Без подписи
+                    read_timeout=60, connect_timeout=60, write_timeout=60
                 )
-                poll_sent = True
-                print(f"✅ Опрос для {gen_id} отправлен.")
+                sarcasm_photo_sent = True
+                print(f"✅ Фото сарказма для {gen_id} отправлено.")
             except Exception as e:
-                print(f"⚠️ Ошибка при отправке опроса для {gen_id}: {e}")
-        else:
-             print("DEBUG: Опрос невалиден (нет вопроса или <2 опций), отправка пропускается.")
+                 print(f"⚠️ Ошибка при отправке фото сарказма для {gen_id}: {e}")
+                 # Не прерываем, если не ушло фото сарказма, но логируем
+            finally:
+                 if sarcasm_png_file_handle: sarcasm_png_file_handle.close()
+        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
-        # Если дошли до сюда без ошибок при отправке медиагруппы
-        success = True
+        # *** ИЗМЕНЕНИЕ: Отправляем опрос после паузы ***
+        # 3. Отправляем опрос, если он валиден
+        if album_sent: # Отправляем опрос только если альбом ушел
+            print("⏳ Пауза 1 секунда перед отправкой опроса...")
+            await asyncio.sleep(1)
 
-    except json.JSONDecodeError as e: # Ошибка обработки JSON
-        print(f"❌ Ошибка декодирования основного JSON файла {local_json_path}: {e}")
+            if poll_question and len(poll_options) >= 2:
+                poll_question_formatted = f"🎭 {poll_question}"
+                try:
+                    print(f"✈️ Отправляем опрос для {gen_id}...")
+                    await bot.send_poll(
+                        chat_id=TELEGRAM_CHAT_ID, question=poll_question_formatted,
+                        options=poll_options, is_anonymous=True
+                    )
+                    poll_sent = True
+                    print(f"✅ Опрос для {gen_id} отправлен.")
+                except Exception as e:
+                    print(f"⚠️ Ошибка при отправке опроса для {gen_id}: {e}")
+            else:
+                 print("DEBUG: Опрос невалиден, отправка пропускается.")
+        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
+
+        # Считаем публикацию успешной, если ушел альбом и фото сарказма
+        if album_sent and sarcasm_photo_sent:
+             success = True
+
+    except json.JSONDecodeError as e:
+        print(f"❌ Ошибка декодирования JSON {local_json_path}: {e}")
         os.makedirs(ERROR_DIR, exist_ok=True)
-        try:
-            shutil.move(local_json_path, os.path.join(ERROR_DIR, os.path.basename(local_json_path)))
-            print(f"📁 Поврежденный JSON {gen_id}.json перемещен в {ERROR_DIR}")
-        except Exception as move_err:
-             print(f"  ⚠️ Не удалось переместить поврежденный JSON: {move_err}")
+        try: shutil.move(local_json_path, os.path.join(ERROR_DIR, os.path.basename(local_json_path)))
+        except Exception as move_err: print(f"  ⚠️ Не удалось переместить поврежденный JSON: {move_err}")
         success = False
-    except Exception as e: # Ловим ошибки отправки медиагруппы или другие непредвиденные
-        print(f"❌ Непредвиденная ошибка во время обработки/отправки {gen_id}: {e}")
+    except Exception as e:
+        print(f"❌ Непредвиденная ошибка при обработке/отправке {gen_id}: {e}")
         success = False
 
     # --- Завершение и обработка файлов ---
-    if success:
-        print(f"✅ Успешная публикация основного контента (альбома) для {gen_id}.")
+    if success: # Успех определяется отправкой АЛЬБОМА и ФОТО САРКАЗМА
+        print(f"✅ Успешная публикация контента для {gen_id}.")
         published_ids.add(gen_id)
         save_published_ids(published_ids)
-
-        # *** ИЗМЕНЕНИЕ: Добавляем сарказм-фото в список для перемещения ***
-        files_to_move = [local_png_path, local_video_path, local_json_path, local_sarcasm_png_path]
-        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
-        for file_path in files_to_move:
+        # Перемещаем все 4 файла в processed
+        for file_path in local_files_to_clean:
             if os.path.exists(file_path):
                 try:
                     destination_path = os.path.join(PROCESSED_DIR, os.path.basename(file_path))
@@ -503,21 +392,13 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                 except Exception as e:
                     print(f"  ⚠️ Не удалось переместить файл {os.path.basename(file_path)} в processed: {e}")
     else:
-        # Если основные медиа не были отправлены (из-за ошибки или неполной группы)
-        # Сообщение об этом уже было выведено выше
-        print(f"⚠️ Отправка основного контента для {gen_id} НЕ УДАЛАСЬ или была пропущена. ID не добавлен в опубликованные.")
-        # Выводим статус для отладки, если JSON был обработан
+        print(f"⚠️ Публикация контента для {gen_id} НЕ УДАЛАСЬ или была пропущена. ID не добавлен в опубликованные.")
         if json_processed_successfully:
-             # Статус отправки медиа определяется флагом album_sent
-             # *** ИЗМЕНЕНИЕ: Убираем статус сарказма ***
-             print(f"   (Статус отправки: Альбом - {'Да' if album_sent else 'Нет'}, Опрос - {'Да' if poll_sent else 'Нет'})")
-             # *** КОНЕЦ ИЗМЕНЕНИЯ ***
-        print(f"   🗑️ Удаляем локальные файлы для {gen_id}, чтобы избежать дублирования при след. запуске.")
+             print(f"   (Статус отправки: Альбом - {'Да' if album_sent else 'Нет'}, Фото сарказма - {'Да' if sarcasm_photo_sent else 'Нет'}, Опрос - {'Да' if poll_sent else 'Нет'})")
+        print(f"   🗑️ Удаляем локальные файлы для {gen_id}...")
+        cleanup_local_files()
 
-        # Удаляем все локальные файлы (JSON, PNG, Video, Sarcasm PNG), которые могли остаться в download
-        cleanup_local_files() # Используем функцию очистки
-
-    # Успех определяется отправкой АЛЬБОМА
+    # Успех определяется отправкой АЛЬБОМА и ФОТО САРКАЗМА
     return success
 
 # ------------------------------------------------------------
@@ -532,7 +413,7 @@ async def main():
     Останавливается после первой успешной публикации.
     """
     print("\n" + "="*50)
-    print("🚀 Запуск скрипта публикации B2 -> Telegram (v14: Альбом из 3 медиа)") # <-- Обновлено название
+    print("🚀 Запуск скрипта публикации B2 -> Telegram (v18: Альбом(2) + Сарказм + Пауза + Опрос)") # <-- Обновлено название
     print("="*50)
 
     print("🧹 Очищаем/создаем локальные папки для скачивания и обработки...")
@@ -556,12 +437,8 @@ async def main():
             gen_ids_in_folder = set()
             for file_version, _folder_name in ls_result:
                 file_name = file_version.file_name
-                # *** ИЗМЕНЕНИЕ: Ищем любой файл, чтобы получить ID ***
-                # Проверяем, что файл находится непосредственно в папке (а не подпапке)
-                # и извлекаем ID
                 relative_path = file_name.replace(folder, '', 1)
                 if '/' not in relative_path: # Файл находится прямо в папке
-                    # Извлекаем ID (часть до первого '.' или до суффикса сарказма)
                     gen_id = None
                     if relative_path.endswith(SARCASM_SUFFIX):
                         gen_id = relative_path[:-len(SARCASM_SUFFIX)]
@@ -571,10 +448,8 @@ async def main():
                     if re.fullmatch(r"\d{8}-\d{4}", gen_id):
                         gen_ids_in_folder.add(gen_id)
                     else:
-                        # Логируем только если это не placeholder
                         if not relative_path.endswith('.bzEmpty'):
                              print(f"   ⚠️ Пропускаем файл с некорректным именем ID: {file_name}")
-                # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
             print(f"   ℹ️ Найдено {len(gen_ids_in_folder)} уникальных ID формата ГГГГММДД-ЧЧММ в {folder}")
 
@@ -597,31 +472,25 @@ async def main():
         print("   🔢 Сортировка по дате и времени (gen_id)...")
 
         published_this_run = False # Флаг, показывающий, опубликовали ли мы что-то в этом запуске
-        # --- НОВЫЙ ЦИКЛ: Перебираем все неопубликованные ID ---
         for gen_id_to_publish, folder_to_publish in unpublished_items:
             print(f"\n▶️ Пытаемся опубликовать следующую группу: ID={gen_id_to_publish} из папки {folder_to_publish}")
             print("-" * 50)
 
             # Пытаемся опубликовать выбранную группу
-            # publish_generation_id вернет False, если группа неполная или произошла ошибка отправки
             success = await publish_generation_id(gen_id_to_publish, folder_to_publish, published_ids)
 
             print("-" * 50)
             if success:
                 print(f"✅ Успешно опубликована группа {gen_id_to_publish}.")
-                published_this_run = True # Устанавливаем флаг
-                break # <-- ВАЖНО: Выходим из цикла после первой успешной публикации
+                published_this_run = True
+                break # Выходим из цикла после первой успешной публикации
             else:
-                # Сообщение о причине неудачи выводится внутри publish_generation_id
                 print(f"ℹ️ Публикация группы {gen_id_to_publish} не удалась или была пропущена. Переходим к следующей...")
-                # Продолжаем цикл для следующего ID
 
-        # --- После цикла ---
         if not published_this_run:
              print("\n⚠️ Не найдено полных групп (4 файла) для публикации в этом запуске.")
 
     else:
-        # Если не найдено ни одного нового ID во всех папках
         print("\n🎉 Нет новых групп для публикации во всех отсканированных папках.")
 
     print("\n🏁 Скрипт завершил работу.")
@@ -635,3 +504,4 @@ if __name__ == "__main__":
         print(f"\n💥 Критическая ошибка: {e}")
     except Exception as e:
          print(f"\n💥 Непредвиденная критическая ошибка: {e}")
+
