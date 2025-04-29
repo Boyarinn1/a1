@@ -215,10 +215,17 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         sarcasm_png_downloaded = True
         print(f"✅ Sarcasm PNG скачан: {local_sarcasm_png_path}")
 
+    # *** ИСПРАВЛЕНИЕ: Используем имя файла в сообщении об ошибке ***
     except FileNotPresent as e:
-        print(f"❌ Группа {gen_id} неполная ({e.file_name} отсутствует). Публикация пропускается.")
+        missing_file_key = ""
+        if not json_downloaded: missing_file_key = json_file_key
+        elif not png_downloaded: missing_file_key = png_file_key
+        elif not video_downloaded: missing_file_key = video_file_key
+        elif not sarcasm_png_downloaded: missing_file_key = sarcasm_png_file_key
+        print(f"❌ Группа {gen_id} неполная ({missing_file_key} отсутствует). Публикация пропускается.")
         cleanup_local_files()
         return False
+    # *** КОНЕЦ ИСПРАВЛЕНИЯ ***
     except B2Error as e:
         print(f"⚠️ Ошибка B2 SDK при скачивании файлов для {gen_id}: {e}")
         cleanup_local_files()
@@ -229,7 +236,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         return False
 
     # --- ПРОВЕРКА НА ПОЛНОТУ ГРУППЫ (ВСЕ 4 ФАЙЛА) ---
-    # Эта проверка теперь избыточна, т.к. FileNotPresent ловится выше, но оставим для ясности
     if not (json_downloaded and png_downloaded and video_downloaded and sarcasm_png_downloaded):
         print(f"❌ Группа {gen_id} неполная (JSON:{json_downloaded}, PNG:{png_downloaded}, Видео:{video_downloaded}, Sarcasm:{sarcasm_png_downloaded}). Пропуск.")
         cleanup_local_files()
@@ -289,7 +295,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         video_file_handle = None
         sarcasm_png_file_handle = None
 
-        # *** ИЗМЕНЕНИЕ: Отправляем альбом из 2 файлов ***
         # 1. Отправка медиагруппы (Фото + Видео)
         try:
             media_items = []
@@ -318,9 +323,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         finally:
             if png_file_handle: png_file_handle.close()
             if video_file_handle: video_file_handle.close()
-        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
-        # *** ИЗМЕНЕНИЕ: Отправляем фото сарказма отдельно ***
         # 2. Отправка фото сарказма
         if album_sent: # Отправляем только если альбом ушел
             try:
@@ -329,19 +332,15 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                 await bot.send_photo(
                     chat_id=TELEGRAM_CHAT_ID,
                     photo=sarcasm_png_file_handle,
-                    # caption="" # Без подписи
                     read_timeout=60, connect_timeout=60, write_timeout=60
                 )
                 sarcasm_photo_sent = True
                 print(f"✅ Фото сарказма для {gen_id} отправлено.")
             except Exception as e:
                  print(f"⚠️ Ошибка при отправке фото сарказма для {gen_id}: {e}")
-                 # Не прерываем, если не ушло фото сарказма, но логируем
             finally:
                  if sarcasm_png_file_handle: sarcasm_png_file_handle.close()
-        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
-        # *** ИЗМЕНЕНИЕ: Отправляем опрос после паузы ***
         # 3. Отправляем опрос, если он валиден
         if album_sent: # Отправляем опрос только если альбом ушел
             print("⏳ Пауза 1 секунда перед отправкой опроса...")
@@ -361,7 +360,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
                     print(f"⚠️ Ошибка при отправке опроса для {gen_id}: {e}")
             else:
                  print("DEBUG: Опрос невалиден, отправка пропускается.")
-        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
         # Считаем публикацию успешной, если ушел альбом и фото сарказма
         if album_sent and sarcasm_photo_sent:
@@ -504,4 +502,3 @@ if __name__ == "__main__":
         print(f"\n💥 Критическая ошибка: {e}")
     except Exception as e:
          print(f"\n💥 Непредвиденная критическая ошибка: {e}")
-
