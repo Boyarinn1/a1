@@ -80,7 +80,8 @@ def load_published_ids() -> Set[str]:
         bucket.download_file_by_name(config_key).save_to(local_config_path)
         with open(local_config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        published = data.get("generation_id", [])
+        # ИСХОДНАЯ ЛОГИКА: Используем 'generation_id' как есть
+        published = data.get("generation_id", []) # Ожидаем список
         if isinstance(published, list):
              published_ids = set(published)
              print(f"ℹ️ Загружено {len(published_ids)} опубликованных ID из {config_key}.")
@@ -100,14 +101,16 @@ def load_published_ids() -> Set[str]:
         if os.path.exists(local_config_path): os.remove(local_config_path)
     return published_ids
 
+# ВОЗВРАЩЕНА ИСХОДНАЯ ЛОГИКА save_published_ids
 def save_published_ids(pub_ids: Set[str]):
     """
     Сохраняет обновленный список опубликованных ID в config_public.json локально
-    и загружает его обратно в B2.
+    и загружает его обратно в B2. (Без добавления processing_lock)
     """
     local_config_path = os.path.join(DOWNLOAD_DIR, "config_public.json")
     config_key = "config/config_public.json"
     try:
+        # ИСХОДНАЯ ЛОГИКА: Сохраняем просто список ID
         data = {"generation_id": sorted(list(pub_ids))}
         os.makedirs(os.path.dirname(local_config_path), exist_ok=True)
         with open(local_config_path, "w", encoding="utf-8") as f:
@@ -147,16 +150,17 @@ def remove_system_phrases(text: str) -> str:
     return clean_text.strip()
 
 # ------------------------------------------------------------
-# 4) Публикация одного generation_id (Альбом: Фото + Видео, Отдельно: Сарказм + Опрос) - ИЗМЕНЕНА
+# 4) Публикация одного generation_id (Альбом: Фото + Видео, Отдельно: Сарказм + Опрос) - ИЗМЕНЕНА ДЛЯ ХЕШТЕГОВ
 # ------------------------------------------------------------
 async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str]) -> bool:
     """
     Скачивает JSON, PNG, Video и Sarcasm PNG.
     Если все 4 файла присутствуют:
-    1. Отправляет МЕДИАГРУППУ (Фото + Видео) с подписью у первого Фото.
-    2. Отправляет САРКАЗМ ФОТО отдельным сообщением.
-    3. Ждет 1 секунду.
-    4. Отправляет ОПРОС (если есть).
+    1. Извлекает основной текст и хештеги из JSON.
+    2. Отправляет МЕДИАГРУППУ (Фото + Видео) с подписью (текст + хештеги) у первого Фото.
+    3. Отправляет САРКАЗМ ФОТО отдельным сообщением.
+    4. Ждет 1 секунду.
+    5. Отправляет ОПРОС (если есть).
     Если хотя бы один из 4 файлов отсутствует,
     пропускает публикацию ПОЛНОСТЬЮ и возвращает False.
     Возвращает True, если медиагруппа и фото сарказма были успешно отправлены, иначе False.
@@ -215,7 +219,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         sarcasm_png_downloaded = True
         print(f"✅ Sarcasm PNG скачан: {local_sarcasm_png_path}")
 
-    # *** ИСПРАВЛЕНИЕ: Используем имя файла в сообщении об ошибке ***
     except FileNotPresent as e:
         missing_file_key = ""
         if not json_downloaded: missing_file_key = json_file_key
@@ -225,7 +228,6 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         print(f"❌ Группа {gen_id} неполная ({missing_file_key} отсутствует). Публикация пропускается.")
         cleanup_local_files()
         return False
-    # *** КОНЕЦ ИСПРАВЛЕНИЯ ***
     except B2Error as e:
         print(f"⚠️ Ошибка B2 SDK при скачивании файлов для {gen_id}: {e}")
         cleanup_local_files()
@@ -256,7 +258,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         with open(local_json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # --- ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ (без изменений) ---
+        # --- ИЗВЛЕЧЕНИЕ ТЕКСТА ПОДПИСИ (логика осталась прежней) ---
         content_value = data.get("content")
         possible_text_keys = ["текст", "content", "text"]
         found_text = None
@@ -274,11 +276,32 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
             if found_text is None:
                 for key in possible_text_keys:
                     if key in content_data: found_text = content_data[key]; break
-        caption_text = found_text.strip() if isinstance(found_text, str) else ""
-        caption_text = remove_system_phrases(caption_text)
-        caption_text = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', caption_text)
-        if len(caption_text) > 1024: caption_text = caption_text[:1020] + "..."
-        print(f"DEBUG: Подпись для фото: '{caption_text[:50]}...'")
+        main_text = found_text.strip() if isinstance(found_text, str) else ""
+        main_text = remove_system_phrases(main_text)
+        main_text = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', main_text)
+        # Пока не обрезаем, сначала добавим хештеги
+
+        # --- НОВОЕ: Извлечение и форматирование хештегов ---
+        hashtags_list = data.get("hashtags") # Получаем список или None
+        formatted_hashtags_str = ""
+        if isinstance(hashtags_list, list):
+            formatted_hashtags = [f"#{tag.strip()}" for tag in hashtags_list if tag.strip()]
+            formatted_hashtags_str = " ".join(formatted_hashtags)
+            print(f"ℹ️ Сформированы хештеги: {formatted_hashtags_str}")
+        elif hashtags_list is not None:
+             print(f"⚠️ Ключ 'hashtags' найден, но не является списком: {type(hashtags_list)}")
+
+        # --- НОВОЕ: Сборка финальной подписи (текст + хештеги) ---
+        caption_text = main_text
+        if formatted_hashtags_str:
+            caption_text += f"\n\n{formatted_hashtags_str}"
+
+        # Обрезаем подпись, если она слишком длинная
+        if len(caption_text) > 1024:
+            caption_text = caption_text[:1020] + "..."
+            print(f"⚠️ Подпись была обрезана до 1024 символов.")
+        print(f"DEBUG: Финальная подпись для фото: '{caption_text[:60]}...'")
+        # --- КОНЕЦ БЛОКА ХЕШТЕГОВ ---
 
         # --- Извлечение опроса (без изменений) ---
         sarcasm_data = data.get("sarcasm", {})
@@ -298,6 +321,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         # 1. Отправка медиагруппы (Фото + Видео)
         try:
             media_items = []
+            # ИЗМЕНЕНО: Используем собранный caption_text (с хештегами)
             current_caption = caption_text
             # 1.1 Добавляем основное фото ПЕРВЫМ с подписью
             png_file_handle = open(local_png_path, "rb")
@@ -379,8 +403,10 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     if success: # Успех определяется отправкой АЛЬБОМА и ФОТО САРКАЗМА
         print(f"✅ Успешная публикация контента для {gen_id}.")
         published_ids.add(gen_id)
+        # ВОЗВРАЩЕНА ИСХОДНАЯ ЛОГИКА: Сохраняем ID сразу
         save_published_ids(published_ids)
         # Перемещаем все 4 файла в processed
+        os.makedirs(PROCESSED_DIR, exist_ok=True) # Убедимся, что папка существует
         for file_path in local_files_to_clean:
             if os.path.exists(file_path):
                 try:
@@ -400,7 +426,7 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
     return success
 
 # ------------------------------------------------------------
-# 5) Основная логика (поиск и публикация) - Без изменений
+# 5) Основная логика (поиск и публикация) - ВОЗВРАЩЕНА ИСХОДНАЯ ЛОГИКА
 # ------------------------------------------------------------
 async def main():
     """
@@ -411,7 +437,7 @@ async def main():
     Останавливается после первой успешной публикации.
     """
     print("\n" + "="*50)
-    print("🚀 Запуск скрипта публикации B2 -> Telegram (v18: Альбом(2) + Сарказм + Пауза + Опрос)") # <-- Обновлено название
+    print("🚀 Запуск скрипта публикации B2 -> Telegram (v20: Хештеги + Исходная логика main)") # <-- Обновлено название
     print("="*50)
 
     print("🧹 Очищаем/создаем локальные папки для скачивания и обработки...")
@@ -422,6 +448,7 @@ async def main():
     print(f"✅ Локальные папки готовы.")
 
     published_ids = load_published_ids()
+    # initial_published_count = len(published_ids) # Больше не нужно
 
     folders_to_scan = ["444/", "555/", "666/"]
     print(f"📂 Папки в бакете '{S3_BUCKET_NAME}' для сканирования: {', '.join(folders_to_scan)}")
@@ -475,18 +502,22 @@ async def main():
             print("-" * 50)
 
             # Пытаемся опубликовать выбранную группу
+            # Функция publish_generation_id теперь добавляет ID в published_ids при успехе
             success = await publish_generation_id(gen_id_to_publish, folder_to_publish, published_ids)
 
             print("-" * 50)
             if success:
                 print(f"✅ Успешно опубликована группа {gen_id_to_publish}.")
                 published_this_run = True
-                break # Выходим из цикла после первой успешной публикации
+                # ВОЗВРАЩЕНА ИСХОДНАЯ ЛОГИКА: Выходим после первой успешной публикации
+                break
             else:
                 print(f"ℹ️ Публикация группы {gen_id_to_publish} не удалась или была пропущена. Переходим к следующей...")
 
+        # ВОЗВРАЩЕНА ИСХОДНАЯ ЛОГИКА: Сообщение о том, были ли публикации
         if not published_this_run:
              print("\n⚠️ Не найдено полных групп (4 файла) для публикации в этом запуске.")
+        # Сохранение ID происходит внутри publish_generation_id при успехе
 
     else:
         print("\n🎉 Нет новых групп для публикации во всех отсканированных папках.")
@@ -502,3 +533,4 @@ if __name__ == "__main__":
         print(f"\n💥 Критическая ошибка: {e}")
     except Exception as e:
          print(f"\n💥 Непредвиденная критическая ошибка: {e}")
+
