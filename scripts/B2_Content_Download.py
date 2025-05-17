@@ -291,17 +291,32 @@ async def publish_generation_id(gen_id: str, folder: str, published_ids: Set[str
         elif hashtags_list is not None:
              print(f"⚠️ Ключ 'hashtags' найден, но не является списком: {type(hashtags_list)}")
 
-        # --- НОВОЕ: Сборка финальной подписи (текст + хештеги) ---
-        caption_text = main_text
-        if formatted_hashtags_str:
-            caption_text += f"\n\n{formatted_hashtags_str}"
+             # --- Сборка финальной подписи (текст + ссылка + хештеги) ---
+             link_html = '<b><a href="https://t.me/boyarinn7">Подпишись, забудешь</a></b>'
 
-        # Обрезаем подпись, если она слишком длинная
-        if len(caption_text) > 1024:
-            caption_text = caption_text[:1020] + "..."
-            print(f"⚠️ Подпись была обрезана до 1024 символов.")
-        print(f"DEBUG: Финальная подпись для фото: '{caption_text[:60]}...'")
-        # --- КОНЕЦ БЛОКА ХЕШТЕГОВ ---
+             parts_for_caption = []
+             if main_text:
+                 parts_for_caption.append(main_text)
+
+             parts_for_caption.append(link_html)  # Добавляем нашу ссылку
+
+             if formatted_hashtags_str:
+                 parts_for_caption.append(formatted_hashtags_str)
+
+             # Собираем все части вместе, разделяя двойным переносом строки
+             # Только если часть не пустая
+             caption_text = "\n\n".join(part for part in parts_for_caption if part)
+
+             # Обрезаем подпись, если она слишком длинная
+             if len(caption_text) > 1024:
+                 # Важно: обрезка может "сломать" HTML-теги, если они попадут на границу.
+                 # Это упрощенная обрезка, как в вашем текущем коде.
+                 # Для более надежной обрезки HTML потребовалась бы сложная логика.
+                 caption_text = caption_text[:1020] + "..."
+                 print(f"⚠️ Подпись была обрезана до 1024 символов.")
+             # Увеличим предпросмотр для отладки
+             print(f"DEBUG: Финальная подпись для фото: '{caption_text[:150]}...'")
+             # --- Конец блока сборки подписи ---
 
         # --- Извлечение опроса (без изменений) ---
         sarcasm_data = data.get("sarcasm", {})
